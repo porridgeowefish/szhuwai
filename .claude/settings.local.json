@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && python test_imports.py)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && python -c \"import pydantic; print\\(f'Pydantic version: {pydantic.__version__}'\\)\")",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && pip list | grep pydantic)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && conda list | grep pydantic)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -c \"import pydantic; print\\(f'Pydantic version: {pydantic.__version__}'\\)\")",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -c \"from api.config import APIConfig; print\\('Config import ok'\\)\")",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -c \"from api.weather_client import WeatherClient; print\\('Weather client import ok'\\)\")",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" test_imports.py)"
+    ]
+  }
+}
