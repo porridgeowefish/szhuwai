@@ -21,6 +21,7 @@ from schemas.weather import (
     WeatherCloudSeaAnalysis,
     WeatherSummary
 )
+from services.weather_analyzer import WeatherAnalyzer
 
 
 class WeatherClient(BaseAPIClient):
@@ -28,9 +29,15 @@ class WeatherClient(BaseAPIClient):
 
     def __init__(self, config=None):
         super().__init__(config or api_config)
-        # 使用开发者主机URL格式
-        self.base_url = f"https://{self.config.WEATHER_DEVELOPER_HOST}.qweatherapi.com/v7"
+        # 使用开发者主机URL格式（注意：主机名已包含.qweatherapi.com）
+        # 检查配置中是否已经包含了域名
+        host = self.config.WEATHER_DEVELOPER_HOST
+        if 'qweatherapi.com' not in host:
+            host = f"{host}.qweatherapi.com"
+        self.base_url = f"https://{host}/v7"
         self.location_cache = {}
+        # 业务分析器（职责分离：Client 只负责数据获取）
+        self.analyzer = WeatherAnalyzer()
 
     def validate_response(self, response: Dict) -> bool:
         """验证API响应格式"""
@@ -74,10 +81,9 @@ class WeatherClient(BaseAPIClient):
         endpoint = "weather/now"
         params = {
             "location": location,
-            "key": self.config.WEATHER_API_KEY,
             "lang": lang
         }
-        return self._make_request("GET", endpoint, params=params)
+        return self._make_weather_request("GET", endpoint, params=params)
 
     @handle_api_errors
     def get_weather_3d(self, location: str, lang: str = "zh") -> CityWeatherResponse:
@@ -229,80 +235,6 @@ class WeatherClient(BaseAPIClient):
             hourly=hourly_data
         )
 
-    def calculate_cloud_sea_probability(self, city_weather: CityWeatherDaily,
-                                       summit_weather: GridWeatherDaily) -> Dict:
-        """计算云海生成概率"""
-        conditions = {
-            "high_humidity": city_weather.humidity > 95,
-            "low_wind": city_weather.windSpeedDay < 12,
-            "inversion_layer": summit_weather.tempMin > city_weather.tempMin
-        }
-
-        probability = 0
-        if conditions["high_humidity"]:
-            probability += 40
-        if conditions["low_wind"]:
-            probability += 30
-        if conditions["inversion_layer"]:
-            probability += 30
-
-        return {
-            "probability": probability,
-            "conditions": conditions,
-            "assessment": "极佳" if probability >= 80 else
-                         "良好" if probability >= 60 else
-                         "一般" if probability >= 40 else "不佳"
-        }
-
-    def check_weather_safety(self, city_forecast: List[CityWeatherDaily],
-                           summit_forecast: List[GridWeatherDaily]) -> Dict:
-        """硬性安全熔断检查"""
-        safety_issues = []
-
-        # 极端温度检查
-        for day in city_forecast:
-            if day.tempMax > 35:
-                safety_issues.append({
-                    "type": "极端高温",
-                    "date": day.fxDate,
-                    "value": day.tempMax,
-                    "risk": "中暑风险"
-                })
-            elif day.tempMin < -10:
-                safety_issues.append({
-                    "type": "极端低温",
-                    "date": day.fxDate,
-                    "value": day.tempMin,
-                    "risk": "冻伤风险"
-                })
-
-        # 暴雨预警
-        for day in city_forecast:
-            if day.precip > 50.0:
-                safety_issues.append({
-                    "type": "暴雨预警",
-                    "date": day.fxDate,
-                    "value": day.precip,
-                    "risk": "山洪风险"
-                })
-
-        # 失温风险
-        for day in city_forecast:
-            if (day.tempMax < 15 and
-                day.precip > 5.0 and
-                int(day.windScaleDay[0]) > 5):
-                safety_issues.append({
-                    "type": "失温风险",
-                    "date": day.fxDate,
-                    "risk": "冷雨+风寒"
-                })
-
-        return {
-            "is_safe": len(safety_issues) == 0,
-            "safety_issues": safety_issues,
-            "risk_level": "低风险" if len(safety_issues) == 0 else "高风险"
-        }
-
     def get_location_coords(self, location: str) -> Dict[str, float]:
         """获取位置的经纬度坐标"""
         # 首先检查缓存
@@ -313,7 +245,6 @@ class WeatherClient(BaseAPIClient):
         endpoint = "geo/lookup"
         params = {
             "location": location,
-            "key": self.config.WEATHER_API_KEY,
             "lang": "zh"
         }
 
@@ -402,17 +333,17 @@ class WeatherClient(BaseAPIClient):
         # 获取逐小时预报（用于时间轴规划）
         hourly_forecast = self.get_hourly_weather(city_params["hourly_api"])
 
-        # 计算云海概率
+        # 使用业务分析器计算云海概率和安全检查
         if city_forecast.daily and summit_forecast.daily:
-            cloud_sea = self.calculate_cloud_sea_probability(
-                city_forecast.daily[0],
-                summit_forecast.daily[0]
+            analysis = self.analyzer.get_comprehensive_analysis(
+                city_forecast.daily,
+                summit_forecast.daily
             )
+            cloud_sea = analysis.get("cloud_sea_probability", {"probability": 0, "assessment": "无法计算"})
+            safety = analysis.get("safety_assessment", {"is_safe": False, "safety_issues": [], "risk_level": "未知"})
         else:
             cloud_sea = {"probability": 0, "assessment": "无法计算"}
-
-        # 安全检查
-        safety = self.check_weather_safety(city_forecast.daily, summit_forecast.daily)
+            safety = {"is_safe": False, "safety_issues": ["数据不完整"], "risk_level": "未知"}
 
         return {
             "city_forecast": city_forecast,
@@ -423,40 +354,12 @@ class WeatherClient(BaseAPIClient):
         }
 
     def check_weather_safety(self, location: str, trip_date: str) -> Dict:
-        """检查天气安全性"""
+        """检查天气安全性（便捷方法，内部使用 Analyzer）"""
         try:
-            # 获取3天天气预报
             forecast = self.get_weather_3d(location)
-
-            safety_issues = []
-
-            for day in forecast.daily:
-                # 检查温度
-                if day.tempMax > 35:
-                    safety_issues.append(f"{day.fxDate}: 最高温度{day.tempMax}°C，有中暑风险")
-                elif day.tempMin < -10:
-                    safety_issues.append(f"{day.fxDate}: 最低温度{day.tempMin}°C，有冻伤风险")
-
-                # 检查降水
-                if day.precipitation > 50:
-                    safety_issues.append(f"{day.fxDate}: 预计降水{day.precipitation}mm，有山洪风险")
-
-                # 检查风力
-                wind_scale_day = int(day.windScaleDay[0]) if day.windScaleDay.isdigit() else 0
-                wind_scale_night = int(day.windScaleNight[0]) if day.windScaleNight.isdigit() else 0
-                max_wind = max(wind_scale_day, wind_scale_night)
-
-                if max_wind > 6:
-                    safety_issues.append(f"{day.fxDate}: 风力{max_wind}级，不适合户外活动")
-
-            return {
-                "location": location,
-                "trip_date": trip_date,
-                "is_safe": len(safety_issues) == 0,
-                "safety_issues": safety_issues,
-                "risk_level": "低风险" if len(safety_issues) == 0 else "高风险"
-            }
-
+            return self.analyzer.check_weather_safety_by_location(
+                location, trip_date, forecast.daily
+            )
         except APIError as e:
             return {
                 "location": location,

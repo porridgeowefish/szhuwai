@@ -56,7 +56,7 @@ class APIConfig(BaseModel):
 
     # API 端点
     WEATHER_BASE_URL: str = Field(
-        default="https://api.qweather.com/v7",
+        default="https://devapi.qweatherapi.com/v7",
         description="和风天气API基础URL"
     )
     WEATHER_DEVELOPER_HOST: str = Field(
@@ -72,7 +72,7 @@ class APIConfig(BaseModel):
         description="Tavily搜索API基础URL"
     )
     LLM_BASE_URL: str = Field(
-        default="https://api.openai.com/v1",
+        default="https://api.siliconflow.cn/v1/chat/completions",
         description="大模型API基础URL"
     )
 

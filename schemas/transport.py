@@ -46,6 +46,19 @@ class RouteStep(BaseModel):
         return self.duration / 60
 
 
+class TransitSegment(BaseModel):
+    """公交段"""
+    type: str = Field(..., description="交通类型 (subway, bus, walk)")
+    line_name: str = Field(..., description="线路名称（如'地铁4号线大兴线'、'特8路'）")
+    line_id: Optional[str] = Field(None, description="线路ID")
+    departure_stop: str = Field(..., description="上车站名称")
+    arrival_stop: str = Field(..., description="下车站名称")
+    duration_min: int = Field(..., ge=0, description="时长（分钟）")
+    distance_m: int = Field(..., ge=0, description="距离（米）")
+    price_yuan: int = Field(..., ge=0, description="价格（元）")
+    operator: Optional[str] = Field(None, description="运营方")
+
+
 class TransitRoute(BaseModel):
     """公交路线"""
     available: bool = Field(..., description="是否有可用路线")
@@ -54,6 +67,10 @@ class TransitRoute(BaseModel):
     cost_yuan: int = Field(..., ge=0, description="费用（元）")
     walking_distance: int = Field(..., ge=0, description="步行距离（米）")
     steps: List[RouteStep] = Field(default_factory=list, description="路线步骤")
+    segments: Optional[List[TransitSegment]] = Field(None, description="公交段详细信息")
+    line_name: Optional[str] = Field(None, description="主要线路名称")
+    departure_stop: Optional[str] = Field(None, description="上车点")
+    arrival_stop: Optional[str] = Field(None, description="下车点")
 
     @field_validator('duration_min')
     @classmethod
@@ -67,6 +84,13 @@ class TransitRoute(BaseModel):
     def is_reasonable(self) -> bool:
         """判断是否合理（步行距离不超过2km，时间不超过3小时）"""
         return self.walking_distance <= 2000 and self.duration_min <= 180
+
+
+class TransitRouteDetail(BaseModel):
+    """详细的公交路线（包含多条方案）"""
+    routes: List[TransitRoute] = Field(..., description="公交路线列表，最多3条")
+    taxi_cost_yuan: Optional[int] = Field(None, description="打车费用预估（元）")
+    walking_distance_m: int = Field(0, description="总步行距离")
 
 
 class DrivingRoute(BaseModel):
@@ -111,6 +135,9 @@ class TransportRoutes(BaseModel):
     recommended_mode: Optional[str] = Field(None, description="推荐交通方式")
     fastest_mode: Optional[str] = Field(None, description="最快交通方式")
     cheapest_mode: Optional[str] = Field(None, description="最便宜交通方式")
+
+    # 打车费用
+    taxi_cost_yuan: Optional[int] = Field(None, description="打车费用预估（元）")
 
     @property
     def has_return_route(self) -> bool:

@@ -22,11 +22,12 @@ from schemas.transport import TransportRoutes, DrivingRoute, GeocodeResult, Loca
 from schemas.search import SearchResult, WebSearchResponse
 from schemas.output import (
     OutdoorActivityPlan, EquipmentItem, SafetyIssue,
-    SafetyAssessment, EmergencyContact, ItineraryItem
+    SafetyAssessment, EmergencyRescueContact, ItineraryItem
 )
 
 # Import API clients
 from api import WeatherClient, MapClient, SearchClient, APIConfig
+from services import WeatherAnalyzer
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -154,7 +155,7 @@ def create_sample_weather() -> WeatherSummary:
 def create_sample_transport() -> TransportRoutes:
     """Create sample transport data"""
     # Get geocoding for locations
-    from tools import MapClient, APIConfig
+    from api import MapClient, APIConfig
     from schemas.transport import LocationInfo, RouteSummary
 
     map_client = MapClient(APIConfig.from_env())
@@ -208,7 +209,7 @@ def create_sample_transport() -> TransportRoutes:
 
 def create_sample_search() -> List[WebSearchResponse]:
     """Create sample search results"""
-    from tools import SearchClient, APIConfig
+    from api import SearchClient, APIConfig
 
     search_client = SearchClient(APIConfig.from_env())
 
@@ -360,9 +361,9 @@ def create_comprehensive_plan() -> OutdoorActivityPlan:
         overall_rating="推荐",
         confidence_score=0.85,
         risk_factors=["部分路段坡度较大", "天气变化"],
-        emergency_contacts=[
-            EmergencyContact(name="急救", phone="120", type="医疗"),
-            EmergencyContact(name="旅游投诉", phone="12301", type="其他")
+        emergency_rescue_contacts=[
+            EmergencyRescueContact(name="急救", phone="120", type="医疗"),
+            EmergencyRescueContact(name="报警", phone="110", type="救援")
         ],
         itinerary=[
             ItineraryItem(time="08:00", activity="从市区出发", location="北京市区"),
@@ -384,6 +385,7 @@ def demonstrate_new_weather_api():
         # Setup environment
         config = APIConfig.from_env()
         weather_client = WeatherClient(config)
+        analyzer = WeatherAnalyzer()  # 业务分析器（职责分离）
         logger.info("Weather client initialized with new API format")
 
         # 1. Demonstrate city weather forecast (with UV and visibility)
@@ -415,19 +417,19 @@ def demonstrate_new_weather_api():
         location_params = weather_client.prepare_location_for_apis("Beijing")
         logger.info(f"Location parameters: {location_params}")
 
-        # 5. Demonstrate cloud sea probability calculation
+        # 5. Demonstrate cloud sea probability calculation (using Analyzer)
         logger.info("\n5. Calculating cloud sea probability...")
         if city_forecast.daily and summit_forecast.daily:
-            cloud_sea = weather_client.calculate_cloud_sea_probability(
+            cloud_sea = analyzer.calculate_cloud_sea_probability(
                 city_forecast.daily[0],
                 summit_forecast.daily[0]
             )
             logger.info(f"Cloud sea probability: {cloud_sea['probability']}%")
             logger.info(f"Assessment: {cloud_sea['assessment']}")
 
-        # 6. Demonstrate safety check
+        # 6. Demonstrate safety check (using Analyzer)
         logger.info("\n6. Performing weather safety check...")
-        safety = weather_client.check_weather_safety(
+        safety = analyzer.check_weather_safety(
             city_forecast.daily,
             summit_forecast.daily
         )

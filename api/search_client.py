@@ -53,7 +53,7 @@ class SearchClient(BaseAPIClient):
             "max_results": max_results
         })
 
-        response = self._make_request("POST", endpoint, json=params)
+        response = self._make_request("POST", endpoint, data=params)
 
         # 转换结果
         results = []
@@ -101,7 +101,7 @@ class SearchClient(BaseAPIClient):
             "to_date": to_date
         }
 
-        response = self._make_request("POST", endpoint, json=params)
+        response = self._make_request("POST", endpoint, data=params)
 
         # 转换结果
         results = []
@@ -138,7 +138,7 @@ class SearchClient(BaseAPIClient):
             "year_end": year_end
         }
 
-        response = self._make_request("POST", endpoint, json=params)
+        response = self._make_request("POST", endpoint, data=params)
 
         # 转换结果
         results = []
@@ -238,3 +238,64 @@ class SearchClient(BaseAPIClient):
         except Exception as e:
             logger.error(f"爬取页面失败 {url}: {str(e)}")
             return None
+
+    def search_emergency_contacts(self, location: str) -> List[Dict]:
+        """搜索应急救援电话（使用百度和抖音）"""
+        emergency_contacts = []
+
+        # 构建搜索查询
+        queries = [
+            f"{location} 户外 应急救援电话 报警",
+            f"{location} 蓝天救援队电话",
+            f"{location} 景区报警电话",
+            f"{location} 户外运动应急救援",
+            f"{location} 旅游局紧急电话"
+        ]
+
+        # 使用百度和抖音作为搜索引擎
+        search_domains = [
+            "www.baidu.com",
+            "www.douyin.com"
+        ]
+
+        for query in queries:
+            # 搜索结果中提取电话号码
+            try:
+                response = self.search(query, max_results=5)
+
+                for result in response.results:
+                    # 从内容中提取电话号码
+                    import re
+                    phone_pattern = r'(1[3-9]\d{9}|0\d{2,3}-?\d{7,8})'
+                    phones = re.findall(phone_pattern, result.content)
+
+                    for phone in phones:
+                        # 去重
+                        if not any(ec['phone'] == phone for ec in emergency_contacts):
+                            emergency_contacts.append({
+                                'name': result.title.split(' - ')[0] if ' - ' in result.title else result.title,
+                                'phone': phone,
+                                'type': '救援',
+                                'source': result.source,
+                                'url': result.url
+                            })
+
+            except Exception as e:
+                logger.error(f"搜索应急救援电话失败: {query}, 错误: {str(e)}")
+                continue
+
+        # 去重并排序
+        emergency_contacts = list({ec['phone']: ec for ec in emergency_contacts}).values()
+
+        # 添加一些常见救援电话作为备选
+        common_contacts = [
+            {'name': '急救中心', 'phone': '120', 'type': '医疗', 'source': 'system'},
+            {'name': '报警电话', 'phone': '110', 'type': '报警', 'source': 'system'},
+            {'name': '火警电话', 'phone': '119', 'type': '救援', 'source': 'system'}
+        ]
+
+        # 合并并去重
+        all_contacts = emergency_contacts + common_contacts
+        all_contacts = list({ec['phone']: ec for ec in all_contacts}).values()
+
+        return list(all_contacts)

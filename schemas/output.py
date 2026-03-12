@@ -13,9 +13,28 @@ from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from .base import Point3D
 from .track import TrackAnalysisResult
-from .weather import WeatherSummary
+from .weather import WeatherSummary, CityWeatherDaily, HourlyWeather
 from .transport import TransportRoutes
 from .search import WebSearchResponse
+
+
+class PlanningContext(BaseModel):
+    """内部流转上下文模型（系统内部使用，不对外暴露）"""
+    model_config = ConfigDict(
+        json_encoders={datetime: lambda v: v.isoformat()}
+    )
+
+    # 原始请求
+    raw_request: str = Field(..., description="用户原始请求")
+
+    # 原始 API 数据
+    track_analysis_raw: TrackAnalysisResult = Field(..., description="完整的轨迹分析结果")
+    weather_raw: WeatherSummary = Field(..., description="完整的天气预报对象")
+    transport_raw: TransportRoutes = Field(..., description="完整的交通API响应")
+    search_raw: List[WebSearchResponse] = Field(default_factory=list, description="完整的网页搜索响应")
+
+    # 可信度评分（内部打点使用）
+    confidence_score: float = Field(..., ge=0, le=1, description="方案可信度评分")
 
 
 class SafetyAssessment(BaseModel):
@@ -26,19 +45,13 @@ class SafetyAssessment(BaseModel):
     risk_level: Optional[Literal["低风险", "中等风险", "高风险"]] = Field(None, description="风险等级")
 
 
-class EmergencyContact(BaseModel):
-    """紧急联系人"""
-    name: str = Field(..., description="姓名/机构名称")
-    phone: str = Field(..., description="电话号码")
-    type: Optional[Literal["医疗", "救援", "旅游", "其他"]] = Field(None, description="联系人类型")
+class EmergencyRescueContact(BaseModel):
+    """公共救援/应急救援电话"""
+    name: str = Field(..., description="救援机构名称")
+    phone: str = Field(..., description="救援电话")
+    type: Optional[Literal["医疗", "救援", "报警"]] = Field(None, description="救援类型")
 
 
-class LocalGuide(BaseModel):
-    """当地向导"""
-    name: str = Field(..., description="姓名")
-    contact: str = Field(..., description="联系方式")
-    experience: Optional[str] = Field(None, description="经验描述")
-    rating: Optional[float] = Field(None, ge=0, le=5, description="评分")
 
 
 class ItineraryItem(BaseModel):
@@ -111,6 +124,14 @@ class SafetyIssue(BaseModel):
         return "低"
 
 
+class GridPointWeather(BaseModel):
+    """关键格点天气（仅保留核心指标）"""
+    point_type: Literal["起点", "终点", "最高点"]
+    temp: int = Field(..., description="温度 (°C)")
+    wind_scale: str = Field(..., description="风力等级")
+    humidity: int = Field(..., description="相对湿度 (%)")
+
+
 class ScenicSpot(BaseModel):
     """风景点"""
     name: str = Field(..., description="景点名称")
@@ -128,108 +149,35 @@ class ScenicSpot(BaseModel):
 
 
 class OutdoorActivityPlan(BaseModel):
-    """户外活动计划最终交付物"""
+    """户外活动计划最终交付物（轻量化 View 模型）"""
     model_config = ConfigDict(
         json_encoders={datetime: lambda v: v.isoformat()}
     )
 
-    # 基础信息
+    # 1. 基础信息
     plan_id: str = Field(..., description="计划ID")
     created_at: datetime = Field(default_factory=datetime.now)
-    user_request: str = Field(..., description="用户原始请求")
     plan_name: str = Field(..., description="计划名称")
+    overall_rating: Literal["推荐", "谨慎推荐", "不推荐"] = Field(..., description="总体推荐等级")
 
-    # 轨迹信息
-    track_analysis: TrackAnalysisResult = Field(..., description="轨迹分析结果")
+    # 2. 文本概述（由 LLM 基于 Context 提炼）
+    track_overview: str = Field(..., description="轨迹概述，如：11km/爬升750m/困难")
+    weather_overview: str = Field(..., description="天气概述，如：周末晴朗，最高25度，无降水风险")
+    transport_overview: str = Field(..., description="交通概述，如：建议驾车，约1.5小时")
 
-    # 天气信息
-    weather_info: WeatherSummary = Field(..., description="天气汇总")
+    # 3. 精准保留的天气数据（用于前端 UI 渲染）
+    trip_date_weather: CityWeatherDaily = Field(..., description="出行当天的详细天气")
+    hourly_weather: List[HourlyWeather] = Field(default_factory=list, description="出行的逐小时天气预报")
+    critical_grid_weather: List[GridPointWeather] = Field(default_factory=list, description="起点、终点、最高点的格点天气简报")
 
-    # 交通信息
-    transport_info: TransportRoutes = Field(..., description="交通路线")
-
-    # 搜索信息
-    search_results: List[WebSearchResponse] = Field(default_factory=list, description="相关搜索结果")
-
-    # 安全评估
-    safety_assessment: SafetyAssessment = Field(default_factory=SafetyAssessment, description="综合安全评估")
-    safety_issues: List[SafetyIssue] = Field(default_factory=list, description="安全问题列表")
-
-    # 装备建议
+    # 4. 核心规划内容
+    itinerary: List[ItineraryItem] = Field(default_factory=list, description="行程安排")
     equipment_recommendations: List[EquipmentItem] = Field(default_factory=list, description="装备建议")
-
-    # 注意事项
+    scenic_spots: List[ScenicSpot] = Field(default_factory=list, description="风景点推荐")
     precautions: List[str] = Field(default_factory=list, description="注意事项")
 
-    # 最佳实践建议
-    best_practices: List[str] = Field(default_factory=list, description="最佳实践")
-
-    # 风景点推荐
-    scenic_spots: List[ScenicSpot] = Field(default_factory=list, description="风景点推荐")
-
-    # 总体评估
-    overall_rating: Literal["推荐", "谨慎推荐", "不推荐"] = Field(..., description="总体推荐等级")
-    confidence_score: float = Field(..., ge=0, le=1, description="方案可信度评分")
-    risk_factors: List[str] = Field(default_factory=list, description="风险因素")
-
-    # 推荐联系人
-    emergency_contacts: List[EmergencyContact] = Field(default_factory=list, description="紧急联系人")
-    local_guides: List[LocalGuide] = Field(default_factory=list, description="当地向导")
-
-    # 行程安排
-    itinerary: List[ItineraryItem] = Field(default_factory=list, description="行程安排")
-
-    @field_validator('confidence_score')
-    @classmethod
-    def validate_confidence_score(cls, v: float) -> float:
-        """验证可信度评分在0到1之间"""
-        if v < 0 or v > 1:
-            raise ValueError("可信度评分必须在0到1之间")
-        return v
-
-    @property
-    def total_equipment_weight(self) -> float:
-        """总装备重量"""
-        return sum(item.weight_kg or 0 for item in self.equipment_recommendations)
-
-    @property
-    def has_critical_safety_issues(self) -> bool:
-        """是否存在关键安全问题"""
-        return any(issue.severity in ["高", "极高"] for issue in self.safety_issues)
-
-    @property
-    def is_safe_plan(self) -> bool:
-        """是否为安全计划"""
-        return not self.has_critical_safety_issues and self.overall_rating != "不推荐"
-
-    @property
-    def required_equipment(self) -> List[EquipmentItem]:
-        """必需装备"""
-        return [item for item in self.equipment_recommendations if item.priority == "必需"]
-
-    @property
-    def recommended_equipment(self) -> List[EquipmentItem]:
-        """推荐装备"""
-        return [item for item in self.equipment_recommendations if item.priority == "推荐"]
-
-    def get_equipment_by_category(self, category: EquipmentCategory) -> List[EquipmentItem]:
-        """按类别获取装备"""
-        return [item for item in self.equipment_recommendations if item.category == category]
-
-    def get_safety_issues_by_type(self, issue_type: SafetyIssueType) -> List[SafetyIssue]:
-        """按类型获取安全问题"""
-        return [issue for issue in self.safety_issues if issue.type == issue_type]
-
-    def get_top_scenic_spots(self, n: int = 3) -> List[ScenicSpot]:
-        """获取前N个最佳风景点"""
-        return sorted(self.scenic_spots,
-                     key=lambda x: (x.is_worth_it, x.difficulty != "困难"),
-                     reverse=True)[:n]
-
-    def to_dict(self) -> Dict:
-        """转换为字典"""
-        return self.model_dump()
-
-    def to_json(self) -> str:
-        """转换为JSON字符串"""
-        return self.model_dump_json(indent=2, ensure_ascii=False)
+    # 5. 安全与应急
+    safety_assessment: SafetyAssessment = Field(default_factory=lambda: SafetyAssessment(), description="综合安全评估")
+    safety_issues: List[SafetyIssue] = Field(default_factory=list, description="具体安全风险点")
+    risk_factors: List[str] = Field(default_factory=list, description="风险因素标签")
+    emergency_rescue_contacts: List[EmergencyRescueContact] = Field(default_factory=list, description="公共/应急救援电话")

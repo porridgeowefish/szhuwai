@@ -9,7 +9,7 @@ import pytest
 from datetime import datetime, timedelta
 from schemas.base import Point3D
 from schemas.track import TrackAnalysisResult, TerrainChange
-from schemas.weather import WeatherDaily, WeatherSummary
+from schemas.weather import CityWeatherDaily, WeatherSummary
 from schemas.transport import RouteStep, DrivingRoute, GeocodeResult
 from schemas.search import SearchResult, WebSearchResponse
 from schemas.output import OutdoorActivityPlan, EquipmentItem, SafetyIssue
@@ -106,24 +106,24 @@ class TestWeatherDaily:
 
     def test_weather_daily(self):
         """测试每日天气"""
-        weather = WeatherDaily(
+        weather = CityWeatherDaily(
             fxDate="2024-03-15",
-            tempMax=25.5,
-            tempMin=15.2,
-            icon="100",
+            tempMax=26,  # 使用整数而不是浮点数
+            tempMin=15,
             textDay="晴",
-            textNight="晴",
             windScaleDay="3",
-            windScaleNight="2",
+            windSpeedDay=10,
             humidity=65,
-            precipitation=0,
-            pop=10,
-            uvIndex=6
+            precip=0.0,
+            pressure=1013,
+            uvIndex=6,
+            vis=20
         )
 
         assert weather.fxDate == "2024-03-15"
-        assert weather.temp_range == 10.3
-        assert weather.avg_wind_scale == 2.5
+        assert weather.tempMax == 26
+        assert weather.tempMin == 15
+        assert weather.windSpeedDay == 10
 
 
 class TestTransport:
@@ -277,8 +277,9 @@ class TestOutput:
     def test_outdoor_activity_plan(self):
         """测试户外活动计划"""
         from schemas.track import TrackAnalysisResult
-        from schemas.weather import WeatherSummary
+        from schemas.weather import WeatherSummary, CityWeatherDaily, HourlyWeather
         from schemas.transport import TransportRoutes, LocationInfo, RouteSummary
+        from datetime import datetime
 
         # 创建简单的轨迹分析
         start = Point3D(lat=39.9, lon=116.4, elevation=100)
@@ -318,25 +319,46 @@ class TestOutput:
             summary=RouteSummary()
         )
 
+        # 创建当天详细天气
+        daily_weather = CityWeatherDaily(
+            fxDate="2024-03-15",
+            tempMax=25,
+            tempMin=15,
+            textDay="晴",
+            windScaleDay="3",
+            windSpeedDay=10,
+            humidity=65,
+            precip=0.0,
+            pressure=1013,
+            uvIndex=6,
+            vis=20
+        )
+
         # 创建计划
         plan = OutdoorActivityPlan(
             plan_id="test-001",
-            user_request="周末去徒步",
             plan_name="北京香山徒步",
-            track_analysis=track,
-            weather_info=weather,
-            transport_info=transport,
             overall_rating="推荐",
-            confidence_score=0.8,
-            risk_factors=[]
+            track_overview="5km/爬升200m/中等",
+            weather_overview="晴天，最高25度，无降水风险",
+            transport_overview="建议驾车，约30分钟",
+            trip_date_weather=daily_weather,
+            itinerary=[],
+            equipment_recommendations=[],
+            scenic_spots=[],
+            precautions=[],
+            safety_assessment={},
+            safety_issues=[],
+            risk_factors=[],
+            emergency_rescue_contacts=[]
         )
 
         assert plan.plan_id == "test-001"
         assert plan.plan_name == "北京香山徒步"
         assert plan.overall_rating == "推荐"
-        assert plan.confidence_score == 0.8
-        assert plan.is_safe_plan
-        assert plan.total_equipment_weight == 0
+        assert plan.track_overview == "5km/爬升200m/中等"
+        assert plan.weather_overview == "晴天，最高25度，无降水风险"
+        assert plan.transport_overview == "建议驾车，约30分钟"
 
 
 if __name__ == "__main__":
