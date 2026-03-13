@@ -7,5 +7,6 @@ API Client 仅负责数据获取和反序列化，由 Services 层消费模型�
 """
 
 from .weather_analyzer import WeatherAnalyzer
+from .track_parser import TrackParser, TrackParseError
 
-__all__ = ["WeatherAnalyzer"]
+__all__ = ["WeatherAnalyzer", "TrackParser", "TrackParseError"]

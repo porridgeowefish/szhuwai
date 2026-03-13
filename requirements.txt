@@ -30,6 +30,9 @@ webdriver-manager>=4.0.1
 pandas>=2.0.0
 numpy>=1.24.0
 
+# For GPX/KML track parsing
+gpxpy>=1.4.2
+
 # For image processing (optional)
 Pillow>=10.0.0
 

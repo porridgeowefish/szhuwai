@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <name>测试轨迹</name>
+    <trkseg>
+      <trkpt lat="39.9042" lon="116.4074">
+        <ele>100</ele>
+        <time>2024-03-15T08:00:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9050" lon="116.4080">
+        <ele>150</ele>
+        <time>2024-03-15T08:10:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9060" lon="116.4090">
+        <ele>250</ele>
+        <time>2024-03-15T08:20:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9070" lon="116.4100">
+        <ele>300</ele>
+        <time>2024-03-15T08:30:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9080" lon="116.4110">
+        <ele>200</ele>
+        <time>2024-03-15T08:40:00Z</time>
+      </trkpt>
+    </trkseg>
+  </trk>
+</gpx>

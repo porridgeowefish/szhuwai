@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+  <Document>
+    <name>测试轨迹</name>
+    <Placemark>
+      <LineString>
+        <coordinates>
+          116.4074,39.9042,100
+          116.4080,39.9050,150
+          116.4090,39.9060,250
+          116.4100,39.9070,300
+          116.4110,39.9080,200
+        </coordinates>
+      </LineString>
+    </Placemark>
+  </Document>
+</kml>

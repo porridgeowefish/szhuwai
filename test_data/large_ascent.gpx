@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1">
+  <trk>
+    <trkseg>
+      <trkpt lat="39.9042" lon="116.4074">
+        <ele>100</ele>
+        <time>2024-03-15T08:00:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9052" lon="116.4084">
+        <ele>150</ele>
+        <time>2024-03-15T08:10:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9062" lon="116.4094">
+        <ele>200</ele>
+        <time>2024-03-15T08:20:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9072" lon="116.4104">
+        <ele>300</ele>
+        <time>2024-03-15T08:30:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9082" lon="116.4114">
+        <ele>320</ele>
+        <time>2024-03-15T08:40:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9092" lon="116.4124">
+        <ele>330</ele>
+        <time>2024-03-15T08:50:00Z</time>
+      </trkpt>
+      <trkpt lat="39.9102" lon="116.4134">
+        <ele>340</ele>
+        <time>2024-03-15T09:00:00Z</time>
+      </trkpt>
+
+    </trkseg>
+  </trk>
+</gpx>
