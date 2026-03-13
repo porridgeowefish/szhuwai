@@ -22,11 +22,11 @@ from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime
 
 # Import API clients and utilities
-from api.config import APIConfig
-from api.weather_client import WeatherClient
-from api.map_client import MapClient
-from api.search_client import SearchClient
-from api.utils import (
+from src.api.config import APIConfig
+from src.api.weather_client import WeatherClient
+from src.api.map_client import MapClient
+from src.api.search_client import SearchClient
+from src.api.utils import (
     RateLimiter,
     APICache,
     APIError,
@@ -38,9 +38,9 @@ from api.utils import (
 )
 
 # Import schemas for response validation
-from schemas.weather import WeatherDaily, WeatherSummary
-from schemas.transport import GeocodeResult, DrivingRoute
-from schemas.search import SearchResult, WebSearchResponse
+from src.schemas.weather import WeatherDaily, WeatherSummary
+from src.schemas.transport import GeocodeResult, DrivingRoute
+from src.schemas.search import SearchResult, WebSearchResponse
 
 
 class TestAPIConfig:
@@ -504,7 +504,7 @@ class TestAPIIntegration:
         )
 
         # Mock 驾车路线
-        from schemas.transport import RouteStep
+        from src.schemas.transport import RouteStep
         mock_driving.return_value = DrivingRoute(
             available=True,
             duration_min=30,

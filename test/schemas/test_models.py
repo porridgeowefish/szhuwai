@@ -6,12 +6,12 @@ Tests for all Pydantic schemas to ensure data validation.
 """
 
 import pytest
-from schemas.base import Point3D
-from schemas.track import TrackAnalysisResult, TerrainChange
-from schemas.weather import CityWeatherDaily, WeatherSummary
-from schemas.transport import RouteStep, DrivingRoute, GeocodeResult
-from schemas.search import SearchResult, WebSearchResponse
-from schemas.output import OutdoorActivityPlan, EquipmentItem, SafetyIssue
+from src.schemas.base import Point3D
+from src.schemas.track import TrackAnalysisResult, TerrainChange
+from src.schemas.weather import CityWeatherDaily, WeatherSummary
+from src.schemas.transport import RouteStep, DrivingRoute, GeocodeResult
+from src.schemas.search import SearchResult, WebSearchResponse
+from src.schemas.output import OutdoorActivityPlan, EquipmentItem, SafetyIssue
 
 
 class TestPoint3D:
@@ -275,9 +275,9 @@ class TestOutput:
 
     def test_outdoor_activity_plan(self):
         """测试户外活动计划"""
-        from schemas.track import TrackAnalysisResult
-        from schemas.weather import CityWeatherDaily
-        from schemas.transport import TransportRoutes, LocationInfo, RouteSummary
+        from src.schemas.track import TrackAnalysisResult
+        from src.schemas.weather import CityWeatherDaily
+        from src.schemas.transport import TransportRoutes, LocationInfo, RouteSummary
 
         # 创建简单的轨迹分析
         start = Point3D(lat=39.9, lon=116.4, elevation=100)

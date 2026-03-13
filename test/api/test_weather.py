@@ -10,8 +10,8 @@ import logging
 # Add current directory to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from api.config import APIConfig
-from api.weather_client import WeatherClient
+from src.api.config import APIConfig
+from src.api.weather_client import WeatherClient
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)

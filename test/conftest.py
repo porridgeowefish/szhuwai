@@ -32,14 +32,15 @@ def data_dir(project_path):
 @pytest.fixture
 def sample_point():
     """Return a sample Point3D object for testing."""
-    from schemas.base import Point3D
+    from src.schemas.base import Point3D
     return Point3D(lat=39.9042, lon=116.4074, elevation=50)
 
 
 @pytest.fixture
 def sample_track_data(sample_point):
     """Return sample track analysis data."""
-    from schemas.track import TrackAnalysisResult
+    from src.schemas.track import TrackAnalysisResult
+    from src.schemas.base import Point3D
     return TrackAnalysisResult(
         total_distance_km=10.5,
         total_ascent_m=250,
@@ -62,7 +63,7 @@ def sample_track_data(sample_point):
 @pytest.fixture
 def sample_weather_data():
     """Return sample weather data."""
-    from schemas.weather import WeatherDaily
+    from src.schemas.weather import WeatherDaily
     return WeatherDaily(
         fxDate="2024-03-15",
         tempMax=25.5,

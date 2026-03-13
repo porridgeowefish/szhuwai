@@ -7,10 +7,10 @@ End-to-end tests for the Outdoor Agent Planner workflow.
 
 import pytest
 from unittest.mock import patch, MagicMock
-from api.config import APIConfig
-from api.weather_client import WeatherClient
-from api.map_client import MapClient
-from api.search_client import SearchClient
+from src.api.config import APIConfig
+from src.api.weather_client import WeatherClient
+from src.api.map_client import MapClient
+from src.api.search_client import SearchClient
 
 
 @pytest.mark.integration
@@ -34,7 +34,7 @@ class TestWorkflowIntegration:
             with patch.object(map_client, 'geocode') as mock_geocode:
                 with patch.object(search_client, 'search') as mock_search:
                     # Setup mock responses
-                    from schemas.weather import CityWeatherResponse, CityWeatherDaily
+                    from src.schemas.weather import CityWeatherResponse, CityWeatherDaily
                     mock_weather.return_value = CityWeatherResponse(
                         location="Beijing",
                         updateTime="2024-03-10 12:00:00",
@@ -54,7 +54,7 @@ class TestWorkflowIntegration:
                         )]
                     )
 
-                    from schemas.transport import GeocodeResult
+                    from src.schemas.transport import GeocodeResult
                     mock_geocode.return_value = GeocodeResult(
                         address="北京市朝阳区",
                         province="北京市",
@@ -65,7 +65,7 @@ class TestWorkflowIntegration:
                         lat=39.982
                     )
 
-                    from schemas.search import WebSearchResponse, SearchResult
+                    from src.schemas.search import WebSearchResponse, SearchResult
                     mock_search.return_value = WebSearchResponse(
                         query="北京 徒步 路线",
                         results=[SearchResult(

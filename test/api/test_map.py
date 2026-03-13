@@ -7,10 +7,10 @@ Tests for the MapClient (Gaode Maps) integration.
 
 import pytest
 from unittest.mock import Mock, patch
-from api.config import APIConfig
-from api.map_client import MapClient
-from api.utils import APIError
-from schemas.transport import (
+from src.api.config import APIConfig
+from src.api.map_client import MapClient
+from src.api.utils import APIError
+from src.schemas.transport import (
     GeocodeResult, DrivingRoute, TransitRoute, TransitSegment,
     RouteStep, TransportRoutes
 )
