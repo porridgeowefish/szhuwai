@@ -7,16 +7,17 @@ Track Parser Tests
 
 import pytest
 
-from services.track_parser import TrackParser, TrackParseError
-from schemas.track import TrackAnalysisResult
-from schemas.base import Point3D
+from src.services.track_parser import TrackParser, TrackParseError
+from src.schemas.track import TrackAnalysisResult
+from src.schemas.base import Point3D
+from pathlib import Path
 
 
 class TestTrackParser:
     """测试 TrackParser 类"""
 
     @pytest.fixture
-    def parser(self):
+    def parser(self) -> TrackParser:
         """返回 TrackParser 实例"""
         return TrackParser()
 
@@ -73,13 +74,13 @@ class TestTrackParser:
   </Document>
 </kml>"""
 
-    def test_parse_nonexistent_file(self, parser, data_dir):
+    def test_parse_nonexistent_file(self, parser: TrackParser, data_dir: Path) -> None:
         """测试解析不存在的文件"""
         nonexistent = data_dir / "nonexistent.gpx"
         with pytest.raises(FileNotFoundError):
             parser.parse_file(nonexistent)
 
-    def test_parse_unsupported_format(self, parser, data_dir):
+    def test_parse_unsupported_format(self, parser: TrackParser, data_dir: Path) -> None:
         """测试解析不支持的文件格式"""
         txt_file = data_dir / "test.txt"
         txt_file.write_text("not a track file")
@@ -87,7 +88,7 @@ class TestTrackParser:
         with pytest.raises(TrackParseError, match="不支持的文件格式"):
             parser.parse_file(txt_file)
 
-    def test_parse_empty_gpx(self, parser, data_dir):
+    def test_parse_empty_gpx(self, parser: TrackParser, data_dir: Path) -> None:
         """测试解析空的 GPX 文件"""
         gpx_file = data_dir / "empty.gpx"
         gpx_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
@@ -97,7 +98,7 @@ class TestTrackParser:
         with pytest.raises(TrackParseError, match="未找到轨迹点"):
             parser.parse_file(gpx_file)
 
-    def test_parse_gpx_single_point(self, parser, data_dir):
+    def test_parse_gpx_single_point(self, parser: TrackParser, data_dir: Path) -> None:
         """测试只有一个点的 GPX 文件"""
         gpx_file = data_dir / "single_point.gpx"
         gpx_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
@@ -114,7 +115,7 @@ class TestTrackParser:
         with pytest.raises(TrackParseError, match="轨迹点数量不足"):
             parser.parse_file(gpx_file)
 
-    def test_parse_gpx_success(self, parser, data_dir, sample_gpx_content):
+    def test_parse_gpx_success(self, parser: TrackParser, data_dir: Path, sample_gpx_content: str) -> None:
         """测试成功解析 GPX 文件"""
         gpx_file = data_dir / "test_track.gpx"
         gpx_file.write_text(sample_gpx_content, encoding='utf-8')
@@ -131,7 +132,7 @@ class TestTrackParser:
         assert result.start_point.elevation == 100
         assert result.end_point.elevation == 200
 
-    def test_parse_kml_success(self, parser, data_dir, sample_kml_content):
+    def test_parse_kml_success(self, parser: TrackParser, data_dir: Path, sample_kml_content: str) -> None:
         """测试成功解析 KML 文件"""
         kml_file = data_dir / "test_track.kml"
         kml_file.write_text(sample_kml_content, encoding='utf-8')
@@ -145,7 +146,7 @@ class TestTrackParser:
         assert result.start_point.elevation == 100
         assert result.end_point.elevation == 200
 
-    def test_custom_track_name(self, parser, data_dir, sample_gpx_content):
+    def test_custom_track_name(self, parser: TrackParser, data_dir: Path, sample_gpx_content: str) -> None:
         """测试自定义轨迹名称"""
         gpx_file = data_dir / "test.gpx"
         gpx_file.write_text(sample_gpx_content, encoding='utf-8')
@@ -154,7 +155,7 @@ class TestTrackParser:
 
         assert result.track_name == "自定义轨迹"
 
-    def test_large_ascent_detection(self, parser, data_dir):
+    def test_large_ascent_detection(self, parser: TrackParser, data_dir: Path) -> None:
         """测试大爬升路段检测"""
         # 创建包含大爬升（>200m）的 GPX 文件
         gpx_file = data_dir / "large_ascent.gpx"
@@ -171,7 +172,7 @@ class TestTrackParser:
         # 爬升量应大于 200m
         assert large_ascents[0].elevation_diff >= 200
 
-    def test_large_descent_detection(self, parser, data_dir):
+    def test_large_descent_detection(self, parser: TrackParser, data_dir: Path) -> None:
         """测试大下降路段检测"""
         # 创建包含大下降（>300m）的 GPX 文件
         gpx_file = data_dir / "large_descent.gpx"
@@ -188,7 +189,7 @@ class TestTrackParser:
         # 下降量应大于 300m
         assert large_descents[0].elevation_diff >= 300
 
-    def test_elevation_stats(self, parser, data_dir, sample_gpx_content):
+    def test_elevation_stats(self, parser: TrackParser, data_dir: Path, sample_gpx_content: str) -> None:
         """测试海拔统计"""
         gpx_file = data_dir / "elevation_test.gpx"
         gpx_file.write_text(sample_gpx_content, encoding='utf-8')
@@ -200,7 +201,7 @@ class TestTrackParser:
         assert result.elevation_range == 200
         assert 100 < result.avg_elevation_m < 300
 
-    def test_difficulty_score_calculation(self, parser, data_dir):
+    def test_difficulty_score_calculation(self, parser: TrackParser, data_dir: Path) -> None:
         """测试难度评分计算"""
         gpx_file = data_dir / "difficulty_test.gpx"
         gpx_content = self._create_gpx_with_elevation_profile(
@@ -213,7 +214,7 @@ class TestTrackParser:
         assert 0 <= result.difficulty_score <= 100
         assert result.difficulty_level in ["简单", "中等", "困难", "极难"]
 
-    def test_duration_estimation(self, parser, data_dir):
+    def test_duration_estimation(self, parser: TrackParser, data_dir: Path) -> None:
         """测试用时估算"""
         gpx_file = data_dir / "duration_test.gpx"
         gpx_content = self._create_gpx_with_elevation_profile(
@@ -227,7 +228,7 @@ class TestTrackParser:
         # 用时应与距离相关
         assert result.estimated_duration_hours < result.total_distance_km * 2
 
-    def test_safety_risk_assessment(self, parser, data_dir):
+    def test_safety_risk_assessment(self, parser: TrackParser, data_dir: Path) -> None:
         """测试安全风险评估"""
         # 低风险轨迹
         gpx_file = data_dir / "low_risk.gpx"
@@ -240,7 +241,7 @@ class TestTrackParser:
 
         assert result.safety_risk in ["低风险", "中等风险", "高风险", "极高风险"]
 
-    def test_haversine_distance(self, parser):
+    def test_haversine_distance(self, parser: TrackParser) -> None:
         """测试距离计算（Haversine 公式）"""
         # 北京天安门到故宫的实际距离约 1.6km
         distance1 = parser._haversine_distance(
@@ -253,7 +254,7 @@ class TestTrackParser:
         distance2 = parser._haversine_distance(39.9042, 116.4074, 39.9042, 116.4074)
         assert distance2 < 0.01
 
-    def test_terrain_change_gradient_calculation(self, parser, data_dir):
+    def test_terrain_change_gradient_calculation(self, parser: TrackParser, data_dir: Path) -> None:
         """测试坡度计算"""
         gpx_file = data_dir / "gradient_test.gpx"
         gpx_content = self._create_gpx_with_elevation_profile(
@@ -269,7 +270,7 @@ class TestTrackParser:
             expected_gradient = (terrain.elevation_diff / terrain.distance_m) * 100
             assert abs(terrain.gradient_percent - expected_gradient) < 0.01
 
-    def test_track_point_properties(self, parser, data_dir):
+    def test_track_point_properties(self, parser: TrackParser, data_dir: Path) -> None:
         """测试轨迹点属性"""
         gpx_file = data_dir / "properties_test.gpx"
         gpx_file.write_text("""<?xml version="1.0" encoding="UTF-8"?>
@@ -302,7 +303,7 @@ class TestTrackParser:
         assert result.max_elev_point.elevation == 120
         assert result.min_elev_point.elevation == 100
 
-    def _create_gpx_with_elevation_profile(self, elevations: list) -> str:
+    def _create_gpx_with_elevation_profile(self, elevations: list[int]) -> str:
         """辅助方法：创建指定海拔轮廓的 GPX 文件"""
         points_xml = ""
         base_lat = 39.9042
