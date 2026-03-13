@@ -7,11 +7,10 @@ Client for integrating with Tavily Search API.
 
 import logging
 from typing import Dict, Optional, List
-import json
 
 logger = logging.getLogger(__name__)
 
-from . import BaseAPIClient, handle_api_errors, APIError
+from . import BaseAPIClient, handle_api_errors
 from .config import api_config
 from src.schemas.search import SearchResult, WebSearchResponse
 
@@ -36,14 +35,25 @@ class SearchClient(BaseAPIClient):
 
     @handle_api_errors
     def search(self, query: str, max_results: int = 10,
-                search_type: str = "web", timeout: int = 30) -> WebSearchResponse:
-        """执行搜索"""
+                search_type: str = "web", search_depth: str = "advanced",
+                timeout: int = 30) -> WebSearchResponse:
+        """执行搜索
+
+        Args:
+            query: 搜索查询，支持格式 "关键词:站点域名" 指定搜索站点
+                   例如: "深圳天气:www.douyin.com"
+            max_results: 最大结果数
+            search_type: 搜索类型 (web, news, academic)
+            search_depth: 搜索深度 (basic, advanced)，advanced 返回 raw_content
+            timeout: 超时时间（秒）
+        """
         endpoint = "/search"
         params = {
             "query": query,
             "max_results": max_results,
             "timeout": timeout,
-            "search_type": search_type
+            "search_type": search_type,
+            "search_depth": search_depth
         }
 
         # 添加搜索历史
@@ -53,7 +63,10 @@ class SearchClient(BaseAPIClient):
             "max_results": max_results
         })
 
-        response = self._make_request("POST", endpoint, data=params)
+        # 添加认证头
+        headers = self.config.get_headers("search")
+
+        response = self._make_request("POST", endpoint, data=params, headers=headers)
 
         # 转换结果
         results = []
@@ -66,7 +79,9 @@ class SearchClient(BaseAPIClient):
                 source=result_data.get("source", ""),
                 source_type=result_data.get("source_type", "web"),
                 published_date=result_data.get("published_date"),
-                relevance_tags=result_data.get("relevance_tags", [])
+                relevance_tags=result_data.get("relevance_tags", []),
+                raw_content=result_data.get("raw_content"),
+                favicon=result_data.get("favicon")
             )
             results.append(result)
 
@@ -166,6 +181,24 @@ class SearchClient(BaseAPIClient):
     def get_search_history(self, limit: int = 10) -> List[Dict]:
         """获取搜索历史"""
         return self.search_history[-limit:]
+
+    @staticmethod
+    def format_site_query(query: str, site: str) -> str:
+        """格式化站点搜索查询
+
+        Args:
+            query: 搜索关键词
+            site: 站点域名，例如 www.douyin.com, www.baidu.com
+
+        Returns:
+            格式化后的查询字符串，格式: "关键词:站点域名"
+        """
+        # 确保站点域名格式正确
+        site = site.strip()
+        if not site.startswith("www.") and not site.startswith("http"):
+            site = f"www.{site}"
+
+        return f"{query}:{site}"
 
     def clear_search_history(self):
         """清空搜索历史"""

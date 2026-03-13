@@ -186,7 +186,7 @@ class TestWeatherClient:
         assert client.base_url == config.WEATHER_BASE_URL
         assert client.config == config
 
-    @patch('api.weather_client.WeatherClient._make_request')
+    @patch('src.api.weather_client.WeatherClient._make_request')
     def test_get_weather_by_location(self, mock_request):
         """测试根据位置获取天气数据"""
         mock_request.return_value = {
@@ -229,7 +229,7 @@ class TestMapClient:
         assert client.base_url == config.MAP_BASE_URL
         assert client.config == config
 
-    @patch('api.map_client.MapClient._make_request')
+    @patch('src.api.map_client.MapClient._make_request')
     def test_geocode_address_to_coordinates(self, mock_request):
         """测试地址转坐标"""
         mock_request.return_value = {
@@ -270,7 +270,7 @@ class TestMapClient:
         # 测试权限不足的错误
         assert client.parse_error({"status": "2"}) == "权限不足"
 
-    @patch('api.map_client.MapClient._make_request')
+    @patch('src.api.map_client.MapClient._make_request')
     def test_driving_route_planning(self, mock_request):
         """测试驾车路线规划"""
         mock_request.return_value = {
@@ -359,7 +359,7 @@ class TestSearchClient:
         invalid_response = {"data": "test"}
         assert client.validate_response(invalid_response) is False
 
-    @patch('api.search_client.SearchClient._make_request')
+    @patch('src.api.search_client.SearchClient._make_request')
     def test_search_execution(self, mock_request):
         """测试执行搜索"""
         mock_request.return_value = {
@@ -487,8 +487,8 @@ class TestAPIIntegration:
     4. 性能基准
     """
 
-    @patch('api.map_client.MapClient.geocode')
-    @patch('api.map_client.MapClient.driving_route')
+    @patch('src.api.map_client.MapClient.geocode')
+    @patch('src.api.map_client.MapClient.driving_route')
     def test_transport_route_integration(self, mock_driving, mock_geocode):
         """测试交通路线集成"""
         # Mock 地理编码结果

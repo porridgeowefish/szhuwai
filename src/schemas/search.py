@@ -30,6 +30,8 @@ class SearchResult(BaseModel):
     source_type: SourceType = Field(default=SourceType.WEB, description="来源类型")
     published_date: Optional[datetime] = Field(None, description="发布日期")
     relevance_tags: List[str] = Field(default_factory=list, description="相关标签")
+    raw_content: Optional[str] = Field(None, description="原始内容（高级搜索时返回）")
+    favicon: Optional[str] = Field(None, description="网站图标URL")
 
     @field_validator('url')
     @classmethod

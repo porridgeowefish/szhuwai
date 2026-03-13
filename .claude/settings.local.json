@@ -76,7 +76,21 @@
       "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m ruff check --fix services/track_parser.py test/services/test_track_parser.py 2>&1)",
       "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py test/services/test_track_parser.py --strict 2>&1)",
       "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py --strict 2>&1)",
-      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py --strict 2>&1 | grep -E \"services/track_parser.py:|Found|error:\")"
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py --strict 2>&1 | grep -E \"services/track_parser.py:|Found|error:\")",
+      "Bash(conda activate:*)",
+      "Bash(D:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -m pytest tests/ -v --tb=short)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && python -m pytest tests/ -v --tb=short)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && python -m pytest test/ -v --tb=short)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\\\\scripts\" && python debug_api.py)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\\\\scripts\" && python test_api_fixed.py)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/api/test_map.py::TestMapClient::test_geocode_address_to_coordinates -v 2>&1 | tail -30)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/domain/test_orchestrator.py::TestOutdoorPlannerRouter::test_execute_planning_without_gpx -v 2>&1 | tail -40)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/domain/test_orchestrator.py -v 2>&1 | tail -30)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/domain/test_orchestrator.py::TestOutdoorPlannerRouter::test_execute_planning_without_gpx -v 2>&1 | tail -30)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/ --tb=no -q 2>&1 | tail -15)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/api/test_map.py::TestMapClient::test_driving_route_with_tolls -v 2>&1 | tail -30)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/ --tb=no -q 2>&1 | tail -10)",
+      "Bash(cd \"D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\" && \"C:\\\\Users\\\\xmz14_ugn3mh4\\\\anaconda3\\\\envs\\\\real_base\\\\python.exe\" -m pytest test/ --tb=no -q 2>&1 | tail -5)"
     ]
   }
 }

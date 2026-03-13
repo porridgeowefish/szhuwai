@@ -8,15 +8,11 @@ Client for integrating with 高德地图 (Gaode Maps) API.
 import logging
 import time
 from typing import Dict, Optional, List
-from urllib.parse import quote
 from functools import wraps
-
-logger = logging.getLogger(__name__)
 
 from . import BaseAPIClient, handle_api_errors, APIError
 from .config import api_config
 from src.schemas.transport import (
-    RouteStep,
     TransitRoute,
     TransitSegment,
     DrivingRoute,
@@ -26,6 +22,8 @@ from src.schemas.transport import (
     ReverseGeocodeResult
 )
 
+logger = logging.getLogger(__name__)
+
 
 class MapClient(BaseAPIClient):
     """高德地图API客户端"""
@@ -33,6 +31,28 @@ class MapClient(BaseAPIClient):
     def __init__(self, config=None):
         super().__init__(config or api_config)
         self.base_url = self.config.MAP_BASE_URL
+
+    def _safe_get_string(self, data: dict, key: str, default: str = "") -> str:
+        """
+        安全获取字符串类型的字段，处理高德 API 返回的空列表 []
+        空列表会被转换为空字符串，避免 Pydantic 验证失败
+
+        Args:
+            data: 字典数据
+            key: 键名
+            default: 默认值
+
+        Returns:
+            str: 字符串值
+        """
+        value = data.get(key, default)
+        if isinstance(value, str):
+            return value
+        elif value is None or value == []:
+            return default
+        else:
+            # 如果是其他类型，尝试转换为字符串
+            return str(value) if value else default
 
     def _retry_request(self, func=None, max_retries=3, delay=1):
         """重试请求装饰器"""
@@ -121,13 +141,14 @@ class MapClient(BaseAPIClient):
             raise APIError(f"未找到地址: {response}", 0, response)
 
         geo_data = geocodes[0]
+
         return GeocodeResult(
-            address=geo_data.get("formatted_address", ""),
-            province=geo_data.get("province", ""),
-            city=geo_data.get("city", ""),
-            district=geo_data.get("district", ""),
-            street=geo_data.get("street", ""),
-            adcode=geo_data.get("adcode", ""),
+            address=self._safe_get_string(geo_data, "formatted_address"),
+            province=self._safe_get_string(geo_data, "province"),
+            city=self._safe_get_string(geo_data, "city"),
+            district=self._safe_get_string(geo_data, "district"),
+            street=self._safe_get_string(geo_data, "street"),
+            adcode=self._safe_get_string(geo_data, "adcode"),
             lon=float(geo_data["location"].split(",")[0]),
             lat=float(geo_data["location"].split(",")[1])
         )
@@ -148,45 +169,32 @@ class MapClient(BaseAPIClient):
 
         regeocode = response.get("regeocode", {})
         address_component = regeocode.get("address_component", {})
-        formatted_address = regeocode.get("formatted_address", "")
+
+        # 安全获取嵌套字典中的字符串
+        def safe_get_nested_string(parent_key: str, child_key: str, default: str = "") -> str:
+            """安全获取嵌套字典中的字符串"""
+            parent = address_component.get(parent_key, {})
+            if isinstance(parent, dict):
+                return self._safe_get_string(parent, child_key, default)
+            return default
 
         return ReverseGeocodeResult(
-            address=formatted_address,
-            province=address_component.get("province", ""),
-            city=address_component.get("city", ""),
-            district=address_component.get("district", ""),
-            adcode=address_component.get("adcode", ""),
-            township=address_component.get("township", ""),
-            street_number=address_component.get("streetNumber", {}).get("streetNumber", ""),
-            building=address_component.get("building", {}).get("name", ""),
+            address=self._safe_get_string(regeocode, "formatted_address"),
+            province=self._safe_get_string(address_component, "province"),
+            city=self._safe_get_string(address_component, "city"),
+            district=self._safe_get_string(address_component, "district"),
+            adcode=self._safe_get_string(address_component, "adcode"),
+            township=self._safe_get_string(address_component, "township"),
+            street_number=safe_get_nested_string("streetNumber", "streetNumber"),
+            building=safe_get_nested_string("building", "name"),
             lon=float(location.split(",")[0]),
             lat=float(location.split(",")[1])
         )
 
-    def _retry_request(self, func=None, max_retries=3, delay=1):
-        """重试请求装饰器"""
-        if func is None:
-            return lambda f: self._retry_request(f, max_retries, delay)
-
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            last_error = None
-            for attempt in range(max_retries):
-                try:
-                    return func(*args, **kwargs)
-                except APIError as e:
-                    last_error = e
-                    if attempt < max_retries - 1:
-                        logger.warning(f"请求失败，第 {attempt + 1} 次重试: {str(e)}")
-                        time.sleep(delay * (2 ** attempt))  # 指数退避
-                        continue
-            raise last_error or APIError("请求失败，超过最大重试次数")
-        return wrapper
-
     @handle_api_errors
     def driving_route(self, origin: str, destination: str,
                      strategy: str = "LEAST_TIME") -> DrivingRoute:
-        """驾车路线规划"""
+        """驾车路线规划（简化版，仅返回核心信息）"""
         endpoint = "direction/driving"
         params = {
             "origin": origin,
@@ -197,6 +205,12 @@ class MapClient(BaseAPIClient):
         }
 
         response = self._make_request("GET", endpoint, params=params)
+
+        # 防御性编程：检查返回状态
+        info = response.get("info", "")
+        if info != "OK":
+            raise APIError(f"高德地图 API 返回错误: {info} - {response.get('info_code', 'Unknown')}", 0, response)
+
         route = response.get("route", {})
         paths = route.get("paths", [])
 
@@ -204,31 +218,17 @@ class MapClient(BaseAPIClient):
             raise APIError("未找到驾车路线", 0, response)
 
         path = paths[0]
-        steps = []
-
-        for step_data in path.get("steps", []):
-            step = RouteStep(
-                instruction=step_data.get("instruction", ""),
-                distance=step_data.get("distance", 0),
-                duration=step_data.get("duration", 0),
-                action=step_data.get("action", ""),
-                orientation=step_data.get("orientation"),
-                road_name=step_data.get("road_name")
-            )
-            steps.append(step)
 
         return DrivingRoute(
             available=True,
             duration_min=int(int(path.get("duration", 0)) / 60),
             distance_km=float(int(path.get("distance", 0)) / 1000),
-            tolls_yuan=int(path.get("tolls", 0)),
-            traffic_lights=path.get("traffic_lights", 0),
-            steps=steps
+            tolls_yuan=int(path.get("tolls", 0))
         )
 
     @handle_api_errors
     def walking_route(self, origin: str, destination: str) -> WalkingRoute:
-        """步行路线规划"""
+        """步行路线规划（简化版，仅返回核心信息）"""
         endpoint = "direction/walking"
         params = {
             "origin": origin,
@@ -238,6 +238,12 @@ class MapClient(BaseAPIClient):
         }
 
         response = self._make_request("GET", endpoint, params=params)
+
+        # 防御性编程：检查返回状态
+        info = response.get("info", "")
+        if info != "OK":
+            raise APIError(f"高德地图 API 返回错误: {info} - {response.get('info_code', 'Unknown')}", 0, response)
+
         route = response.get("route", {})
         paths = route.get("paths", [])
 
@@ -245,30 +251,17 @@ class MapClient(BaseAPIClient):
             raise APIError("未找到步行路线", 0, response)
 
         path = paths[0]
-        steps = []
-
-        for step_data in path.get("steps", []):
-            step = RouteStep(
-                instruction=step_data.get("instruction", ""),
-                distance=step_data.get("distance", 0),
-                duration=step_data.get("duration", 0),
-                action=step_data.get("action", ""),
-                orientation=step_data.get("orientation"),
-                road_name=step_data.get("road_name")
-            )
-            steps.append(step)
 
         return WalkingRoute(
             available=True,
             duration_min=int(path.get("duration", 0) / 60),
-            distance_m=int(path.get("distance", 0)),
-            steps=steps
+            distance_m=int(path.get("distance", 0))
         )
 
     @handle_api_errors
     def transit_route(self, origin: str, destination: str,
                      city: str = None) -> List[TransitRoute]:
-        """公交路线规划 - 返回前3条路线"""
+        """公交路线规划 - 返回前3条路线（简化版，仅返回核心信息）"""
         endpoint = "direction/transit/integrated"
         params = {
             "origin": origin,
@@ -281,6 +274,12 @@ class MapClient(BaseAPIClient):
             params["city"] = city
 
         response = self._make_request("GET", endpoint, params=params)
+
+        # 防御性编程：检查返回状态
+        info = response.get("info", "")
+        if info != "OK":
+            raise APIError(f"高德地图 API 返回错误: {info} - {response.get('info_code', 'Unknown')}", 0, response)
+
         route = response.get("route", {})
         transfers = route.get("transfers", [])
 
@@ -290,22 +289,7 @@ class MapClient(BaseAPIClient):
         routes = []
         # 取前3条路线
         for transfer in transfers[:3]:
-            steps = []
             segments = []
-
-            # 解析路线步骤
-            for step_data in transfer.get("segments", []):
-                # 步行段
-                for walk_data in step_data.get("walk_steps", []):
-                    step = RouteStep(
-                        instruction=walk_data.get("instruction", ""),
-                        distance=walk_data.get("distance", 0),
-                        duration=walk_data.get("duration", 0),
-                        action="walking",
-                        orientation=walk_data.get("orientation"),
-                        road_name=walk_data.get("road_name")
-                    )
-                    steps.append(step)
 
             # 解析公交段详细信息
             for step_data in transfer.get("segments", []):
@@ -313,14 +297,14 @@ class MapClient(BaseAPIClient):
                     for busline in step_data["bus"]["buslines"]:
                         segment = TransitSegment(
                             type="bus",
-                            line_name=busline.get("name", ""),
-                            line_id=busline.get("id", ""),
-                            departure_stop=busline.get("departure_stop", ""),
-                            arrival_stop=busline.get("arrival_stop", ""),
+                            line_name=self._safe_get_string(busline, "name"),
+                            line_id=self._safe_get_string(busline, "id"),
+                            departure_stop=self._safe_get_string(busline, "departure_stop"),
+                            arrival_stop=self._safe_get_string(busline, "arrival_stop"),
                             duration_min=int(step_data.get("duration", 0) / 60),
                             distance_m=int(step_data.get("distance", 0)),
                             price_yuan=int(step_data.get("price", 0)),
-                            operator=busline.get("operator", "")
+                            operator=self._safe_get_string(busline, "operator")
                         )
                         segments.append(segment)
 
@@ -329,10 +313,10 @@ class MapClient(BaseAPIClient):
                     subway_info = step_data["railway"]["subway"]
                     segment = TransitSegment(
                         type="subway",
-                        line_name=subway_info.get("name", ""),
-                        line_id=subway_info.get("id", ""),
-                        departure_stop=subway_info.get("departure_stop", ""),
-                        arrival_stop=subway_info.get("arrival_stop", ""),
+                        line_name=self._safe_get_string(subway_info, "name"),
+                        line_id=self._safe_get_string(subway_info, "id"),
+                        departure_stop=self._safe_get_string(subway_info, "departure_stop"),
+                        arrival_stop=self._safe_get_string(subway_info, "arrival_stop"),
                         duration_min=int(step_data.get("duration", 0) / 60),
                         distance_m=int(step_data.get("distance", 0)),
                         price_yuan=int(step_data.get("price", 0))
@@ -345,10 +329,9 @@ class MapClient(BaseAPIClient):
                 distance_km=float(transfer.get("distance", 0) / 1000),
                 cost_yuan=int(transfer.get("price", 0)),
                 walking_distance=int(transfer.get("walking_distance", 0)),
-                steps=steps,
                 segments=segments if segments else None,
-                departure_stop=transfer.get("departure_stop"),
-                arrival_stop=transfer.get("arrival_stop"),
+                departure_stop=self._safe_get_string(transfer, "departure_stop"),
+                arrival_stop=self._safe_get_string(transfer, "arrival_stop"),
                 line_name=segments[0].line_name if segments else None
             )
             routes.append(route)

@@ -145,19 +145,38 @@ def handle_api_errors(func: Callable) -> Callable:
         except requests.exceptions.Timeout:
             raise TimeoutError("请求超时", 0, {})
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 429:
-                raise RateLimitError("超出速率限制", 429, e.response.json())
-            elif e.response.status_code in [401, 403]:
-                raise AuthenticationError("认证失败", e.response.status_code, e.response.json())
-            elif e.response.status_code == 404:
-                raise NotFoundError("资源未找到", 404, e.response.json())
+            if hasattr(e, 'response') and e.response:
+                response_json = {}
+                try:
+                    response_json = e.response.json()
+                except:
+                    response_json = {"raw_response": e.response.text[:1000]}  # 保留原始文本
+
+                if e.response.status_code == 429:
+                    raise RateLimitError("超出速率限制", 429, response_json)
+                elif e.response.status_code in [401, 403]:
+                    raise AuthenticationError("认证失败", e.response.status_code, response_json)
+                elif e.response.status_code == 404:
+                    raise NotFoundError("资源未找到", 404, response_json)
+                else:
+                    raise APIError(f"API错误: {e.response.status_code}", e.response.status_code, response_json)
             else:
-                raise APIError(f"API错误: {e.response.status_code}", e.response.status_code, e.response.json())
+                raise APIError(f"HTTP Error: {str(e)}", 0, {})
         except requests.exceptions.RequestException as e:
-            raise NetworkError(f"网络错误: {str(e)}", 0, {})
+            error_details = {
+                "error_type": str(type(e).__name__),
+                "error_message": str(e)
+            }
+            logger.error(f"网络请求异常: {str(e)}")
+            raise NetworkError(f"网络错误: {str(e)}", 0, error_details)
         except Exception as e:
-            logger.error(f"Unexpected error in {func.__name__}: {str(e)}")
-            raise APIError(f"未知错误: {str(e)}", 0, {})
+            error_details = {
+                "error_type": str(type(e).__name__),
+                "error_message": str(e),
+                "function": func.__name__
+            }
+            logger.error(f"Unexpected error in {func.__name__}: {str(e)}", exc_info=True)
+            raise APIError(f"未知错误: {str(e)}", 0, error_details)
     return wrapper
 
 
@@ -256,11 +275,26 @@ class BaseAPIClient(ABC):
 
         except requests.exceptions.HTTPError as e:
             if e.response and e.response.content:
-                error_msg = self.parse_error(e.response.json())
+                try:
+                    response_json = e.response.json()
+                    error_msg = self.parse_error(response_json)
+                    # 详细记录错误响应
+                    logger.error(f"API request failed: {method} {endpoint}")
+                    logger.error(f"Status Code: {e.response.status_code}")
+                    logger.error(f"Response Text: {e.response.text}")
+                    logger.error(f"Error Message: {error_msg}")
+                except Exception as json_err:
+                    # 如果 JSON 解析失败
+                    error_msg = f"HTTP Error {e.response.status_code}"
+                    logger.error(f"API request failed: {method} {endpoint}")
+                    logger.error(f"Status Code: {e.response.status_code}")
+                    logger.error(f"Response Text: {e.response.text}")
+                    logger.error(f"JSON Parse Error: {str(json_err)}")
             else:
-                error_msg = "Unknown error"
-            logger.error(f"API request failed: {method} {endpoint} - {error_msg}")
-            raise APIError(error_msg, e.response.status_code, e.response.json() if e.response and e.response.content else {})
+                error_msg = f"HTTP Error {e.response.status_code}" if hasattr(e, 'response') and e.response else "Unknown HTTP error"
+                logger.error(f"API request failed: {method} {endpoint} - {error_msg}")
+                logger.error("No response content available")
+            raise APIError(error_msg, e.response.status_code if hasattr(e, 'response') else None, {})
 
     def _retry_request(self, func: Callable, *args, **kwargs) -> Any:
         """重试机制"""

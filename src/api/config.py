@@ -136,7 +136,23 @@ class APIConfig(BaseModel):
                     if line and not line.startswith('#'):
                         if '=' in line:
                             key, value = line.split('=', 1)
-                            config_data[key.strip()] = value.strip()
+                            key = key.strip()
+                            value = value.strip()
+                            # 处理环境变量映射
+                            if key in env_mapping:
+                                config_data[env_mapping[key]] = value
+                            # 处理代理配置
+                            elif key == 'PROXY_HTTP':
+                                if 'proxy' not in config_data:
+                                    config_data['proxy'] = {}
+                                config_data['proxy']['http'] = value
+                            elif key == 'PROXY_HTTPS':
+                                if 'proxy' not in config_data:
+                                    config_data['proxy'] = {}
+                                config_data['proxy']['https'] = value
+                            # 处理其他配置项
+                            elif key in cls.model_fields:
+                                config_data[key] = value
 
         return cls(**config_data)
 

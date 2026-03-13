@@ -76,46 +76,59 @@ async def health_check():
 
 @app.post("/api/generate-plan", response_model=PlanResponse)
 async def generate_plan(
-    user_request: str = Form(...),
-    file: Optional[UploadFile] = File(None)
+    trip_date: str = Form(..., description="出行时间(YYYY-MM-DD)"),
+    departure_point: str = Form(..., description="出发地点(供高德解析使用，需尽量详细)"),
+    additional_info: str = Form("", description="补充信息"),
+    file: UploadFile = File(..., description="GPX/KML 轨迹文件（必填）")
 ) -> PlanResponse:
     """
     生成户外活动计划
 
-    接收用户请求和可选的 GPX/KML 轨迹文件，调用 Planner 生成完整的户外活动计划。
+    接收出行时间、出发地点、补充信息和轨迹文件，调用 Planner 生成完整的户外活动计划。
 
-    - **user_request**: 用户请求描述（表单字段）
-    - **file**: 可选的轨迹文件（.gpx 或 .kml）
+    轨迹文件是唯一不可替代的数据源，所有查询基于轨迹解析出的经纬度坐标。
+
+    - **trip_date**: 出行时间（YYYY-MM-DD，必填）
+    - **departure_point**: 出发地点（供高德解析使用，需尽量详细，必填）
+    - **additional_info**: 补充信息（可选）
+    - **file**: GPX/KML 轨迹文件（必填）
     """
     temp_file_path = None
-    logger.info(f"收到计划生成请求: {user_request}")
+    logger.info(f"收到计划生成请求: trip_date={trip_date}, departure_point={departure_point}")
+
+    # 验证必填字段
+    if not trip_date or not departure_point or not file:
+        raise HTTPException(
+            status_code=400,
+            detail="trip_date、departure_point 和 file 都是必填项"
+        )
 
     try:
-        # 处理文件上传
-        if file:
-            # 验证文件后缀名
-            file_ext = Path(file.filename).suffix.lower()
-            if file_ext not in ['.gpx', '.kml']:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"不支持的文件格式: {file_ext}，仅支持 .gpx 和 .kml"
-                )
+        # 验证文件后缀名
+        file_ext = Path(file.filename).suffix.lower()
+        if file_ext not in ['.gpx', '.kml']:
+            raise HTTPException(
+                status_code=400,
+                detail=f"不支持的文件格式: {file_ext}，仅支持 .gpx 和 .kml"
+            )
 
-            # 生成唯一文件名
-            unique_filename = f"{uuid.uuid4()}{file_ext}"
-            temp_file_path = TEMP_TRACKS_DIR / unique_filename
+        # 生成唯一文件名
+        unique_filename = f"{uuid.uuid4()}{file_ext}"
+        temp_file_path = TEMP_TRACKS_DIR / unique_filename
 
-            # 保存上传的文件
-            content = await file.read()
-            with open(temp_file_path, "wb") as f:
-                f.write(content)
+        # 保存上传的文件
+        content = await file.read()
+        with open(temp_file_path, "wb") as f:
+            f.write(content)
 
-            logger.info(f"已保存临时文件: {temp_file_path}")
+        logger.info(f"已保存临时文件: {temp_file_path}")
 
         # 调用规划器生成计划
         plan = router.execute_planning(
-            user_request=user_request,
-            gpx_path=str(temp_file_path) if temp_file_path else None
+            trip_date=trip_date,
+            departure_point=departure_point,
+            additional_info=additional_info,
+            gpx_path=str(temp_file_path)
         )
         logger.info(f"计划生成成功: {plan.plan_id}")
 
@@ -143,54 +156,6 @@ async def generate_plan(
             try:
                 os.remove(temp_file_path)
                 logger.info(f"已清理临时文件: {temp_file_path}")
-            except Exception as e:
-                logger.warning(f"清理临时文件失败: {e}")
-
-
-@app.post("/api/generate-plan/simple")
-async def generate_plan_simple(
-    user_request: str = Form(...),
-    file: Optional[UploadFile] = File(None)
-):
-    """
-    简化版生成计划接口
-
-    支持文件上传，使用 Form + File 方式。
-    """
-    temp_file_path = None
-
-    try:
-        # 处理文件上传
-        if file:
-            file_ext = Path(file.filename).suffix.lower()
-            if file_ext not in ['.gpx', '.kml']:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"不支持的文件格式: {file_ext}，仅支持 .gpx 和 .kml"
-                )
-
-            unique_filename = f"{uuid.uuid4()}{file_ext}"
-            temp_file_path = TEMP_TRACKS_DIR / unique_filename
-
-            content = await file.read()
-            with open(temp_file_path, "wb") as f:
-                f.write(content)
-
-        plan = router.execute_planning(
-            user_request=user_request,
-            gpx_path=str(temp_file_path) if temp_file_path else None
-        )
-
-        return plan
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if temp_file_path and os.path.exists(temp_file_path):
-            try:
-                os.remove(temp_file_path)
             except Exception as e:
                 logger.warning(f"清理临时文件失败: {e}")
 

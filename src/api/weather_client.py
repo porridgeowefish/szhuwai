@@ -5,13 +5,11 @@ Weather API Client
 Client for integrating with 和风天气 (QWeather) API.
 """
 
-from typing import Dict, Optional, List
-from datetime import datetime
+from typing import Dict, List
 
 from . import BaseAPIClient, handle_api_errors, APIError
 from .config import api_config
 from src.schemas.weather import (
-    WeatherBaseDaily,
     CityWeatherDaily,
     GridWeatherDaily,
     HourlyWeather,

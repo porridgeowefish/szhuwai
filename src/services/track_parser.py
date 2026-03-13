@@ -6,6 +6,7 @@
 
 职责：
 - 解析 GPX/KML 文件提取轨迹点
+- 对轨迹点进行平滑处理（去除噪点）
 - 计算距离、爬升、下降等统计信息
 - 识别大爬升/大下降路段
 - 生成难度和安全评估
@@ -34,10 +35,60 @@ class TrackParser:
     ASCENT_INTERRUPTION_THRESHOLD = 50  # 爬升中断阈值（米）
     DESCENT_INTERRUPTION_THRESHOLD = 20  # 下降中断阈值（米）
 
+    # 平滑算法常量
+    SMOOTHING_WINDOW_SIZE = 5  # 滑动平均窗口大小（推荐3-5）
+    ELEVATION_OUTLIER_THRESHOLD = 50  # 海拔异常值阈值（米）
+    SMOOTHING_MIN_POINTS = 50  # 最少点数阈值，低于此值不进行平滑（避免影响少量测试点）
+
     def __init__(self) -> None:
         """初始化解析器"""
         self._gpx_parser = None
         self._kml_parser = None
+
+    def _smooth_elevation(self, points: List[Point3D]) -> List[Point3D]:
+        """
+        对轨迹点海拔进行滑动平均滤波，去除噪点
+
+        使用窗口大小为 5 的滑动平均，平滑每个点的海拔值。
+        只有当数据点数量超过阈值时才进行平滑处理。
+
+        Args:
+            points: 原始轨迹点列表
+
+        Returns:
+            List[Point3D]: 平滑后的轨迹点列表
+        """
+        # 只有当数据点数量足够多时才进行平滑处理
+        if len(points) < self.SMOOTHING_MIN_POINTS:
+            return points[:]
+
+        window_size = min(self.SMOOTHING_WINDOW_SIZE, len(points))
+        half_window = window_size // 2
+
+        smoothed_points = []
+
+        for i, point in enumerate(points):
+            # 计算窗口内海拔平均值
+            window_start = max(0, i - half_window)
+            window_end = min(len(points), i + half_window + 1)
+            window_points = points[window_start:window_end]
+
+            # 计算平均海拔
+            avg_elevation = sum(p.elevation for p in window_points) / len(window_points)
+
+            # 检测并过滤异常值（与平均值差异过大的点）
+            if abs(point.elevation - avg_elevation) > self.ELEVATION_OUTLIER_THRESHOLD:
+                # 使用窗口平均值替换异常值
+                smoothed_points.append(Point3D(
+                    lat=point.lat,
+                    lon=point.lon,
+                    elevation=avg_elevation,
+                    timestamp=point.timestamp
+                ))
+            else:
+                smoothed_points.append(point)
+
+        return smoothed_points
 
     def parse_file(
         self,
@@ -125,7 +176,12 @@ class TrackParser:
             raise TrackParseError("GPX 文件中未找到轨迹点")
 
         logger.info(f"从 {file_path} 解析到 {len(points)} 个轨迹点")
-        return self._analyze_points(points, track_name)
+
+        # 对轨迹点进行平滑处理（去除海拔噪点）
+        smoothed_points = self._smooth_elevation(points)
+        logger.info("海拔平滑处理完成")
+
+        return self._analyze_points(smoothed_points, track_name)
 
     def _parse_kml(
         self,
@@ -181,7 +237,12 @@ class TrackParser:
             raise TrackParseError("KML 文件中未找到轨迹点")
 
         logger.info(f"从 {file_path} 解析到 {len(points)} 个轨迹点")
-        return self._analyze_points(points, track_name)
+
+        # 对轨迹点进行平滑处理（去除海拔噪点）
+        smoothed_points = self._smooth_elevation(points)
+        logger.info("海拔平滑处理完成")
+
+        return self._analyze_points(smoothed_points, track_name)
 
     def _analyze_points(
         self,

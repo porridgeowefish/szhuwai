@@ -54,31 +54,50 @@ class OutdoorPlannerRouter:
         # 关键点（存储轨迹解析后的重要位置）
         self.key_points: Dict[str, Point3D] = {}
 
-    def execute_planning(self, user_request: str, gpx_path: str = None) -> OutdoorActivityPlan:
+    def execute_planning(self, trip_date: str, departure_point: str,
+                         additional_info: str, gpx_path: str) -> OutdoorActivityPlan:
         """
         执行户外活动规划主流程
 
         Args:
-            user_request: 用户原始请求
-            gpx_path: GPX 轨迹文件路径（可选）
+            trip_date: 出行时间（YYYY-MM-DD）
+            departure_point: 出发地点（供高德解析使用）
+            additional_info: 补充信息
+            gpx_path: GPX/KML 轨迹文件路径（必填）
 
         Returns:
             OutdoorActivityPlan: 最终的户外活动计划
+
+        Raises:
+            ValueError: 如果轨迹解析失败
         """
-        # 步骤 1: 轨迹解析
+        # 步骤 1: 强制解析轨迹（轨迹是唯一数据源）
         track_analysis = self._parse_track(gpx_path)
+        if not track_analysis:
+            raise ValueError("无法解析轨迹文件，规划终止")
 
         # 步骤 2: 坐标纠偏
-        if track_analysis:
-            self._coordinate_correction(track_analysis)
+        self._coordinate_correction(track_analysis)
 
-        # 步骤 3: 并发数据获取
+        # 步骤 3: 提取坐标真理（轨迹起点的经纬度为绝对目的地）
+        start_point = track_analysis.start_point
+        if not start_point:
+            raise ValueError("轨迹解析成功但无法获取起点坐标，规划终止")
+
+        destination_coord = f"{start_point.lon},{start_point.lat}"
+        logger.info(f"提取到轨迹目的地坐标: {destination_coord}")
+
+        # 步骤 4: 并发数据获取（基于轨迹坐标）
         weather_data, transport_data, search_data = self._gather_data_concurrently(
             track_analysis=track_analysis,
-            user_request=user_request
+            trip_date=trip_date,
+            departure_point=departure_point,
+            destination_coord=destination_coord,
+            additional_info=additional_info
         )
 
-        # 步骤 4: 上下文组装
+        # 步骤 5: 上下文组装
+        user_request = f"计划在{trip_date}从{departure_point}出发进行户外活动。{additional_info}"
         context = self._assemble_context(
             user_request=user_request,
             track_analysis=track_analysis,
@@ -87,16 +106,25 @@ class OutdoorPlannerRouter:
             search_data=search_data
         )
 
-        # 步骤 5: LLM 提炼与实例化
+        # 步骤 6: LLM 提炼与实例化
         return self._llm_synthesis(context)
 
-    def _parse_track(self, gpx_path: str = None) -> Optional[TrackAnalysisResult]:
+    def _parse_track(self, gpx_path: str) -> Optional[TrackAnalysisResult]:
         """
-        步骤 1: 轨迹解析
+        步骤 1: 轨迹解析（强制必填）
+
+        Args:
+            gpx_path: GPX/KML 轨迹文件路径
+
+        Returns:
+            TrackAnalysisResult: 轨迹分析结果
+
+        Raises:
+            FileNotFoundError: 如果文件不存在
+            ValueError: 如果文件解析失败
         """
         if not gpx_path or not Path(gpx_path).exists():
-            logger.warning("未提供 GPX 文件或文件不存在，将根据请求关键词规划")
-            return None
+            raise FileNotFoundError(f"轨迹文件不存在: {gpx_path}")
 
         try:
             logger.info(f"开始解析轨迹文件: {gpx_path}")
@@ -106,7 +134,7 @@ class OutdoorPlannerRouter:
             return track_analysis
         except Exception as e:
             logger.error(f"轨迹解析失败: {e}")
-            return None
+            raise ValueError(f"轨迹文件解析失败: {str(e)}")
 
     def _coordinate_correction(self, track_analysis: TrackAnalysisResult):
         """
@@ -149,52 +177,136 @@ class OutdoorPlannerRouter:
 
         logger.info("坐标纠偏完成")
 
-    def _gather_data_concurrently(self, track_analysis: Optional[TrackAnalysisResult],
-                                user_request: str) -> Tuple[Optional[WeatherSummary], Optional[TransportRoutes], List[WebSearchResponse]]:
+    def _gather_data_concurrently(self, track_analysis: TrackAnalysisResult,
+                                  trip_date: str, departure_point: str,
+                                  destination_coord: str, additional_info: str) -> Tuple[Optional[WeatherSummary], Optional[TransportRoutes], List[WebSearchResponse]]:
         """
-        步骤 3: 使用线程池并发调用 API 客户端获取数据
+        步骤 4: 使用线程池并发调用 API 客户端获取数据
+
+        基于轨迹解析的坐标进行所有查询，确保数据的准确性和一致性。
+
+        Args:
+            track_analysis: 轨迹分析结果
+            trip_date: 出行时间
+            departure_point: 出发地点（用于地理编码）
+            destination_coord: 目的地坐标（轨迹起点坐标）
+            additional_info: 补充信息
+
+        Returns:
+            Tuple: (天气数据, 交通数据, 搜索数据)
         """
-        logger.info("开始并发获取数据")
+        logger.info("开始并发获取数据（基于轨迹坐标）")
 
-        # 准备获取位置信息
-        location = None
-        if track_analysis and self.key_points.get('start'):
-            location = f"{self.key_points['start'].lat:.4f},{self.key_points['start'].lon:.4f}"
-        elif track_analysis:
-            # 如果没有关键点，使用起点
-            if track_analysis.start_point:
-                location = f"{track_analysis.start_point.lat:.4f},{track_analysis.start_point.lon:.4f}"
+        # 获取关键坐标用于天气查询（WGS84坐标系）
+        weather_location = f"{track_analysis.start_point.lat},{track_analysis.start_point.lon}"
 
-        # 构建搜索查询（自动追加安全关键词）
-        search_query = f"{user_request} 户外安全 应急救援 报警电话 急救电话"
+        # 构建搜索关键词（结合轨迹名称和补充信息）
+        track_name = track_analysis.track_name or "户外徒步"
+        search_keywords = []
+        if track_name:
+            search_keywords.append(track_name)
+        if additional_info:
+            search_keywords.append(additional_info)
+        # 自动追加安全关键词
+        search_keywords.extend(["户外安全", "应急救援", "报警电话", "急救电话"])
+        search_query = " ".join(search_keywords)
 
         # 定义获取函数
         def fetch_weather():
-            if location:
-                try:
-                    return self.weather_client.get_weather_summary(location, user_request)
-                except Exception as e:
-                    logger.error(f"获取天气数据失败: {e}")
-                    return None
-            return None
+            """获取轨迹起点和最高点的格点天气数据"""
+            try:
+                start = track_analysis.start_point
+                # 使用格点天气API - 参数是 (lon, lat) 顺序
+                logger.info(f"获取格点天气: lon={start.lon}, lat={start.lat}, 日期={trip_date}")
+                grid_weather = self.weather_client.get_grid_weather_3d(start.lon, start.lat)
+
+                # 将 GridWeatherResponse 转换为 CityWeatherResponse 格式
+                from src.schemas.weather import WeatherSummary, CityWeatherResponse, CityWeatherDaily
+
+                city_daily = []
+                for day in grid_weather.daily:
+                    city_daily.append(CityWeatherDaily(
+                        fxDate=day.fxDate,
+                        tempMax=day.tempMax,
+                        tempMin=day.tempMin,
+                        textDay=day.textDay,
+                        windScaleDay=day.windScaleDay,
+                        windSpeedDay=day.windSpeedDay,
+                        humidity=day.humidity,
+                        precip=day.precip,
+                        pressure=day.pressure,
+                        uvIndex=5,  # 格点天气无此字段，使用默认值
+                        vis=10,     # 格点天气无此字段，使用默认值
+                        cloud=50    # 格点天气无此字段，使用默认值
+                    ))
+
+                city_weather = CityWeatherResponse(
+                    location=grid_weather.location,
+                    updateTime=grid_weather.updateTime,
+                    daily=city_daily
+                )
+
+                summary = WeatherSummary(
+                    trip_date=trip_date,
+                    forecast_days=3,
+                    use_grid=True,
+                    forecast_3d=city_weather
+                )
+                # 计算最高最低温度
+                if grid_weather and grid_weather.daily:
+                    temps = []
+                    for day in grid_weather.daily:
+                        temps.extend([day.tempMax, day.tempMin])
+                    if temps:
+                        summary.max_temp = max(temps)
+                        summary.min_temp = min(temps)
+
+                return summary
+            except Exception as e:
+                logger.error(f"获取天气数据失败: {e}")
+                return None
 
         def fetch_transport():
-            if location:
-                try:
-                    start = self.key_points.get('start')
-                    end = self.key_points.get('end')
-                    if start and end:
-                        return self.map_client.get_driving_route(
-                            start.lat, start.lon,
-                            end.lat, end.lon
-                        )
-                except Exception as e:
-                    logger.error(f"获取路线数据失败: {e}")
-                    return None
-            return None
+            """获取从出发地点到轨迹起点的交通路线"""
+            try:
+                logger.info(f"获取交通路线: 起点={departure_point}, 终点坐标={destination_coord}")
+                # 先对出发地点进行地理编码
+                departure_geocode = self.map_client.geocode(departure_point)
+                departure_coord = f"{departure_geocode.lon},{departure_geocode.lat}"
+                logger.info(f"出发地点地理编码: {departure_coord}")
+
+                # 获取驾车路线
+                driving_route = self.map_client.driving_route(departure_coord, destination_coord)
+
+                # 转换为 TransportRoutes 格式
+                from src.schemas.transport import TransportRoutes, LocationInfo, RouteSummary
+
+                dep_lon, dep_lat = departure_coord.split(',')
+                dest_lon, dest_lat = destination_coord.split(',')
+
+                return TransportRoutes(
+                    origin=LocationInfo(
+                        address=departure_point,
+                        lon=float(dep_lon),
+                        lat=float(dep_lat)
+                    ),
+                    destination=LocationInfo(
+                        address="轨迹起点",
+                        lon=float(dest_lon),
+                        lat=float(dest_lat)
+                    ),
+                    outbound={"driving": driving_route.model_dump()},
+                    return_route={},
+                    summary=RouteSummary()
+                )
+            except Exception as e:
+                logger.error(f"获取交通路线失败: {e}")
+                return None
 
         def fetch_search():
+            """搜索相关信息"""
             try:
+                logger.info(f"执行搜索查询: {search_query}")
                 return self.search_client.search(search_query, max_results=10)
             except Exception as e:
                 logger.error(f"搜索失败: {e}")
@@ -310,26 +422,15 @@ class OutdoorPlannerRouter:
         # 构建 LLM 提示词
         llm_prompt = self._build_llm_prompt(context)
 
-        # 调用 LLM API 生成计划
-        try:
-            plan = self._call_llm_api(
-                prompt=llm_prompt,
-                plan_id=plan_id,
-                track_overview=track_overview,
-                weather_overview=weather_overview,
-                transport_overview=transport_overview,
-                context=context
-            )
-        except Exception as e:
-            logger.error(f"LLM API 调用失败: {e}，使用备用方案")
-            # 如果 LLM 调用失败，使用 mock 计划
-            plan = self._create_mock_plan(
-                plan_id=plan_id,
-                track_overview=track_overview,
-                weather_overview=weather_overview,
-                transport_overview=transport_overview,
-                context=context
-            )
+        # 调用 LLM API 生成计划（无兜底，失败即抛出异常）
+        plan = self._call_llm_api(
+            prompt=llm_prompt,
+            plan_id=plan_id,
+            track_overview=track_overview,
+            weather_overview=weather_overview,
+            transport_overview=transport_overview,
+            context=context
+        )
 
         logger.info("LLM 提炼完成")
         return plan
@@ -378,6 +479,8 @@ class OutdoorPlannerRouter:
 
 7. **emergency_rescue_contacts 中的 type 字段必须从以下列表中选择**：
    - 医疗、救援、报警
+
+8. **⚠️ 零幻觉原则**：请基于提供的真实轨迹指标（里程、爬升、海拔）进行风险评估。如果数据缺失，请报告数据不足，严禁编造轨迹指标或虚构数据。
 
 ```json
 {

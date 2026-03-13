@@ -36,7 +36,6 @@ class RouteStep(BaseModel):
     instruction: str  # 指导说明
     distance: float = Field(..., ge=0, description="距离（米）")
     duration: int = Field(..., ge=0, description="时长（秒）")
-    action: str  # 动作类型
     orientation: Optional[str] = None  # 朝向
     road_name: Optional[str] = None  # 道路名称
 
@@ -60,13 +59,12 @@ class TransitSegment(BaseModel):
 
 
 class TransitRoute(BaseModel):
-    """公交路线"""
+    """公交路线（简化版，仅返回核心信息）"""
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
     distance_km: float = Field(..., ge=0, description="距离（公里）")
     cost_yuan: int = Field(..., ge=0, description="费用（元）")
     walking_distance: int = Field(..., ge=0, description="步行距离（米）")
-    steps: List[RouteStep] = Field(default_factory=list, description="路线步骤")
     segments: Optional[List[TransitSegment]] = Field(None, description="公交段详细信息")
     line_name: Optional[str] = Field(None, description="主要线路名称")
     departure_stop: Optional[str] = Field(None, description="上车点")
@@ -94,13 +92,11 @@ class TransitRouteDetail(BaseModel):
 
 
 class DrivingRoute(BaseModel):
-    """驾车路线"""
+    """驾车路线（简化版，仅返回核心信息）"""
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
     distance_km: float = Field(..., ge=0, description="距离（公里）")
     tolls_yuan: int = Field(..., ge=0, description="过路费（元）")
-    traffic_lights: int = Field(..., ge=0, description="红绿灯数量")
-    steps: List[RouteStep] = Field(default_factory=list, description="路线步骤")
 
     @property
     def cost_per_km(self) -> float:
@@ -111,11 +107,10 @@ class DrivingRoute(BaseModel):
 
 
 class WalkingRoute(BaseModel):
-    """步行路线"""
+    """步行路线（简化版，仅返回核心信息）"""
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
     distance_m: int = Field(..., ge=0, description="距离（米）")
-    steps: List[RouteStep] = Field(default_factory=list, description="路线步骤")
 
     @property
     def is_feasible(self) -> bool:
@@ -179,6 +174,14 @@ class GeocodeResult(BaseModel):
     adcode: str = Field(..., description="行政区划代码")
     lon: float = Field(..., description="经度", ge=-180, le=180)
     lat: float = Field(..., description="纬度", ge=-90, le=90)
+
+    @field_validator('street')
+    @classmethod
+    def validate_street(cls, v: Optional[List[str]]) -> Optional[str]:
+        """验证街道字段"""
+        if isinstance(v, list):
+            return v[0] if v else None
+        return v
 
     @field_validator('adcode')
     @classmethod
