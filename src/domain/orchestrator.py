@@ -23,7 +23,8 @@ from src.schemas.output import (
     ScenicSpot,
     EquipmentItem,
     ItineraryItem,
-    GridPointWeather
+    GridPointWeather,
+    EquipmentCategory
 )
 from src.schemas.weather import WeatherSummary
 from src.schemas.track import TrackAnalysisResult
@@ -100,8 +101,8 @@ class OutdoorPlannerRouter:
         try:
             logger.info(f"开始解析轨迹文件: {gpx_path}")
             track_analysis = self.track_parser.parse_file(gpx_path)
-            logger.info(f"轨迹解析完成: 总距离 {track_analysis.total_distance:.2f}km, "
-                       f"爬升 {track_analysis.total_ascent}m, 下降 {track_analysis.total_descent}m")
+            logger.info(f"轨迹解析完成: 总距离 {track_analysis.total_distance_km:.2f}km, "
+                       f"爬升 {track_analysis.total_ascent_m}m, 下降 {track_analysis.total_descent_m}m")
             return track_analysis
         except Exception as e:
             logger.error(f"轨迹解析失败: {e}")
@@ -353,7 +354,30 @@ class OutdoorPlannerRouter:
                     "role": "system",
                     "content": """你是一个专业的户外活动规划助手。根据用户请求和收集到的数据（轨迹、天气、交通、安全信息），生成一个结构化的户外活动计划。
 
-请严格按照以下 JSON 格式输出户外活动计划，确保所有字段都正确填写：
+请严格按照以下 JSON 格式输出户外活动计划，确保所有字段都正确填写。
+
+⚠️ 重要约束（必须遵守）：
+1. **equipment_recommendations 中的 category 字段必须从以下列表中选择**：
+   - 服装、鞋类、背包、露营装备、炊具、安全装备、导航工具、卫生用品、电子产品、其他
+   - 绝对不允许创造新分类！例如防晒霜归入"卫生用品"或"其他"
+
+2. **equipment_recommendations 中的 priority 字段必须从以下列表中选择**：
+   - 必需、推荐、可选
+
+3. **safety_issues 中的 type 字段必须从以下列表中选择**：
+   - 天气风险、地形风险、交通风险、野生动物风险、紧急情况、装备风险、身体条件风险
+
+4. **safety_issues 中的 severity 字段必须从以下列表中选择**：
+   - 低、中、高、极高
+
+5. **scenic_spots 中的 difficulty 字段必须从以下列表中选择**：
+   - 简单、中等、困难
+
+6. **overall_rating 和 safety_assessment 中的 recommendation 字段必须从以下列表中选择**：
+   - 推荐、谨慎推荐、不推荐
+
+7. **emergency_rescue_contacts 中的 type 字段必须从以下列表中选择**：
+   - 医疗、救援、报警
 
 ```json
 {
@@ -579,6 +603,18 @@ class OutdoorPlannerRouter:
 5. 注意事项、安全评估、安全风险点、风险因素标签
 6. 应急救援电话
 
+## 重要约束条件
+
+关于装备建议 (equipment_recommendations)：
+请注意，装备的 `category` 字段必须且只能从以下列表中选择：
+['服装', '鞋类', '背包', '露营装备', '炊具', '安全装备', '导航工具', '卫生用品', '电子产品', '其他']。
+
+绝对不允许创造新的分类！例如：
+- 如果建议带防晒霜、护肤品、面霜等，请归类到 "卫生用品"
+- 如果建议带登山杖、GPS等，请归类到 "导航工具"
+- 如果建议带急救包、手电筒等，请归类到 "安全装备"
+- 如果建议带其他未明确列出的物品，请归类到 "其他"
+
 请确保输出完全符合 OutdoorActivityPlan 的 JSON Schema。
 """
         return prompt
@@ -610,12 +646,21 @@ class OutdoorPlannerRouter:
         equipment = [
             EquipmentItem(
                 name="登山包",
-                category="背包",
+                category=EquipmentCategory.BACKPACK,
                 priority="必需",
                 quantity=1,
                 weight_kg=3,
                 description="30L以上的登山背包",
                 alternatives=["户外背包"]
+            ),
+            EquipmentItem(
+                name="防晒霜",
+                category=EquipmentCategory.HYGIENE,
+                priority="推荐",
+                quantity=1,
+                weight_kg=0.2,
+                description="防晒指数SPF50+",
+                alternatives=["防晒喷雾"]
             )
         ]
 
