@@ -7,7 +7,7 @@ Final delivery schemas for the Outdoor Activity Planner.
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Dict, Optional, Literal
+from typing import List, Optional, Literal
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 

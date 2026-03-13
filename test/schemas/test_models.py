@@ -6,7 +6,6 @@ Tests for all Pydantic schemas to ensure data validation.
 """
 
 import pytest
-from datetime import datetime, timedelta
 from schemas.base import Point3D
 from schemas.track import TrackAnalysisResult, TerrainChange
 from schemas.weather import CityWeatherDaily, WeatherSummary
@@ -207,7 +206,7 @@ class TestSearch:
         )
 
         assert result.title == "测试标题"
-        assert result.is_trusted_source == False
+        assert not result.is_trusted_source
         assert result.content_preview == "这是一个测试内容摘要"
 
     def test_web_search_response(self):
@@ -277,13 +276,12 @@ class TestOutput:
     def test_outdoor_activity_plan(self):
         """测试户外活动计划"""
         from schemas.track import TrackAnalysisResult
-        from schemas.weather import WeatherSummary, CityWeatherDaily, HourlyWeather
+        from schemas.weather import CityWeatherDaily
         from schemas.transport import TransportRoutes, LocationInfo, RouteSummary
-        from datetime import datetime
 
         # 创建简单的轨迹分析
         start = Point3D(lat=39.9, lon=116.4, elevation=100)
-        track = TrackAnalysisResult(
+        _track = TrackAnalysisResult(
             total_distance_km=5,
             total_ascent_m=200,
             total_descent_m=100,
@@ -302,7 +300,7 @@ class TestOutput:
         )
 
         # 创建天气摘要
-        weather = WeatherSummary(
+        _weather = WeatherSummary(
             trip_date="2024-03-15",
             forecast_days=3,
             use_grid=True,
@@ -312,7 +310,7 @@ class TestOutput:
         )
 
         # 创建交通路线
-        transport = TransportRoutes(
+        _transport = TransportRoutes(
             origin=LocationInfo(address="北京"),
             destination=LocationInfo(address="香山"),
             outbound={"driving": {"available": True, "duration_min": 30}},

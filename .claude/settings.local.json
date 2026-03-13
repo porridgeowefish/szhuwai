@@ -63,7 +63,20 @@
       "Bash(find . -name \"*.pyc\" -delete)",
       "Bash(ls -la | grep -E \"^d|^[^d].*\\\\.\\(py|md|txt|json|yml|yaml|toml|cfg|ini\\)$\")",
       "Bash(ls -la test_*.py 2>/dev/null || echo \"No test_*.py files in root\")",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pip install gpxpy fastkml -q)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pip install gpxpy -q -i https://pypi.tuna.tsinghua.edu.cn/simple)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pip install \"fastkml==1.4.0\" -i https://pypi.tuna.tsinghua.edu.cn/simple)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/services/test_track_parser.py -v 2>&1 | head -80)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/services/test_track_parser.py -v 2>&1 | head -100)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/services/test_track_parser.py -v 2>&1)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m ruff check services/track_parser.py test/services/test_track_parser.py 2>&1)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pip install ruff -i https://pypi.tuna.tsinghua.edu.cn/simple -q && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m ruff check services/track_parser.py test/services/test_track_parser.py 2>&1)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m ruff check --fix services/track_parser.py test/services/test_track_parser.py 2>&1)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py test/services/test_track_parser.py --strict 2>&1)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py --strict 2>&1)",
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && \"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m mypy services/track_parser.py --strict 2>&1 | grep -E \"services/track_parser.py:|Found|error:\")"
     ]
   }
 }

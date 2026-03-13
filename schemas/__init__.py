@@ -35,7 +35,19 @@ from .transport import (
     ReverseGeocodeResult
 )
 from .search import SearchResult, WebSearchResponse
-from .output import OutdoorActivityPlan
+from .output import (
+    OutdoorActivityPlan,
+    PlanningContext,
+    SafetyAssessment,
+    EmergencyRescueContact,
+    ItineraryItem,
+    EquipmentCategory,
+    EquipmentItem,
+    SafetyIssueType,
+    SafetyIssue,
+    GridPointWeather,
+    ScenicSpot
+)
 
 __all__ = [
     # Base models
@@ -76,5 +88,15 @@ __all__ = [
     "WebSearchResponse",
 
     # Output models
-    "OutdoorActivityPlan"
+    "OutdoorActivityPlan",
+    "PlanningContext",
+    "SafetyAssessment",
+    "EmergencyRescueContact",
+    "ItineraryItem",
+    "EquipmentCategory",
+    "EquipmentItem",
+    "SafetyIssueType",
+    "SafetyIssue",
+    "GridPointWeather",
+    "ScenicSpot"
 ]
