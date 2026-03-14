@@ -29,11 +29,15 @@ class TrackParseError(Exception):
 class TrackParser:
     """轨迹文件解析器"""
 
-    # 业务规则常量
-    LARGE_ASCENT_THRESHOLD = 200  # 大爬升阈值（米）
-    LARGE_DESCENT_THRESHOLD = 300  # 大下降阈值（米）
-    ASCENT_INTERRUPTION_THRESHOLD = 50  # 爬升中断阈值（米）
-    DESCENT_INTERRUPTION_THRESHOLD = 20  # 下降中断阈值（米）
+    # 业务规则常量 - 大爬升/大下降识别
+    LARGE_ASCENT_THRESHOLD = 300  # 大爬升阈值：上升 >= 300m
+    LARGE_ASCENT_DESCENT_TOLERANCE = 15  # 大爬升时允许的最大下降： < 15m
+    LARGE_DESCENT_THRESHOLD = 400  # 大下降阈值：下降 > 400m
+    LARGE_DESCENT_ASCENT_TOLERANCE = 50  # 大下降时允许的最大上升：< 50m
+
+    # 中断条件
+    GRADIENT_CHECK_DISTANCE_M = 1000  # 坡度检查距离：1km
+    MIN_GRADIENT_THRESHOLD_M = 40  # 最小海拔变化阈值：40m（1km内变化不超过此值则中断）
 
     # 平滑算法常量
     SMOOTHING_WINDOW_SIZE = 5  # 滑动平均窗口大小（推荐3-5）
@@ -276,20 +280,35 @@ class TrackParser:
         # 地形变化段识别
         terrain_changes: List[TerrainChange] = []
 
-        # 当前爬升/下降段状态
-        current_ascent_start: Optional[Point3D] = None
-        current_descent_start: Optional[Point3D] = None
-        current_ascent_peak_elevation = -float('inf')
-        current_descent_valley_elevation = float('inf')
+        # 大爬升/大下降段状态跟踪
+        # ascent_start: 大爬升起点
+        # ascent_peak: 大爬升过程中的最高点
+        # ascent_distance: 累计距离
+        ascent_start: Optional[Point3D] = None
+        ascent_peak: Optional[Point3D] = None
+        ascent_distance_m = 0.0
+        ascent_last_check_idx = 0  # 上次坡度检查的点索引
+
+        # descent_start: 大下降起点
+        # descent_valley: 大下降过程中的最低点
+        # descent_distance: 累计距离
+        descent_start: Optional[Point3D] = None
+        descent_valley: Optional[Point3D] = None
+        descent_distance_m = 0.0
+        descent_last_check_idx = 0  # 上次坡度检查的点索引
+
+        # 累计距离（用于坡度检查）
+        segment_distance_m = 0.0
 
         # 计算每一段的统计信息
         for i in range(len(points) - 1):
             p1 = points[i]
             p2 = points[i + 1]
 
-            # 计算水平距离（Haversine 公式的简化版）
+            # 计算水平距离（Haversine 公式）
             distance = self._haversine_distance(p1.lat, p1.lon, p2.lat, p2.lon)
             total_distance_m += distance
+            segment_distance_m += distance
 
             # 计算海拔差
             elev_diff = p2.elevation - p1.elevation
@@ -308,119 +327,190 @@ class TrackParser:
                 min_elevation = p2.elevation
                 min_elev_point = p2
 
-            # 地形变化段识别（大爬升）
-            if elev_diff > 0:
-                if current_ascent_start is None:
-                    current_ascent_start = p1
-                    current_ascent_peak_elevation = p1.elevation
+            # ========== 大爬升识别逻辑 ==========
+            # 规则：上升 >= 300m，下降 < 15m，算作连续大爬升
+            if elev_diff >= 0:
+                # 上升或平地
+                if ascent_start is None:
+                    # 开始新的爬升段
+                    ascent_start = p1
+                    ascent_peak = p2
+                    ascent_distance_m = distance
+                    ascent_last_check_idx = i
+                else:
+                    # 继续爬升段
+                    ascent_distance_m += distance
+                    if p2.elevation > ascent_peak.elevation:
+                        ascent_peak = p2
 
-                current_ascent_peak_elevation = max(current_ascent_peak_elevation, p2.elevation)
-
-                # 检查是否结束当前下降段
-                if current_descent_start is not None:
-                    descent_diff = current_descent_valley_elevation - current_ascent_start.elevation
-                    if abs(descent_diff) >= self.LARGE_DESCENT_THRESHOLD:
-                        # 结束下降段
-                        descent_distance = self._haversine_distance(
-                            current_descent_start.lat, current_descent_start.lon,
-                            p2.lat, p2.lon
-                        )
-                        if descent_distance > 0:
-                            gradient = (abs(descent_diff) / descent_distance) * 100
+                # 检查是否需要中断当前下降段
+                if descent_start is not None:
+                    # 计算从下降起点到当前点的上升量
+                    ascent_since_descent_start = p2.elevation - descent_valley.elevation if descent_valley else 0
+                    if ascent_since_descent_start >= self.LARGE_DESCENT_ASCENT_TOLERANCE:
+                        # 上升超过阈值，中断下降段
+                        # 先检查是否满足大下降条件
+                        total_descent = descent_start.elevation - descent_valley.elevation
+                        if total_descent > self.LARGE_DESCENT_THRESHOLD:
                             terrain_changes.append(TerrainChange(
                                 change_type="大下降",
-                                start_point=current_descent_start,
-                                end_point=Point3D(
-                                    lat=p2.lat, lon=p2.lon,
-                                    elevation=current_descent_valley_elevation,
-                                    timestamp=None
-                                ),
-                                elevation_diff=abs(descent_diff),
-                                distance_m=descent_distance,
-                                gradient_percent=gradient
+                                start_point=descent_start,
+                                end_point=descent_valley,
+                                elevation_diff=total_descent,
+                                distance_m=descent_distance_m,
+                                gradient_percent=(total_descent / descent_distance_m * 100) if descent_distance_m > 0 else 0
                             ))
-                    current_descent_start = None
-                    current_descent_valley_elevation = float('inf')
+                        # 重置下降段
+                        descent_start = None
+                        descent_valley = None
+                        descent_distance_m = 0.0
 
-            # 地形变化段识别（大下降）
-            elif elev_diff < 0:
-                if current_descent_start is None:
-                    current_descent_start = p1
-                    current_descent_valley_elevation = p1.elevation
+            else:
+                # 下降
+                if ascent_start is not None:
+                    # 计算当前累计下降量（从峰值到当前点）
+                    descent_from_peak = ascent_peak.elevation - p2.elevation
 
-                current_descent_valley_elevation = min(current_descent_valley_elevation, p2.elevation)
-
-                # 检查是否结束当前爬升段
-                if current_ascent_start is not None:
-                    ascent_diff = current_ascent_peak_elevation - current_ascent_start.elevation
-                    # 检查中断是否小于阈值
-                    interruption = abs(p2.elevation - current_ascent_peak_elevation)
-                    if ascent_diff >= self.LARGE_ASCENT_THRESHOLD and interruption < self.ASCENT_INTERRUPTION_THRESHOLD:
-                        ascent_distance = self._haversine_distance(
-                            current_ascent_start.lat, current_ascent_start.lon,
-                            p2.lat, p2.lon
-                        )
-                        if ascent_distance > 0:
-                            gradient = (ascent_diff / ascent_distance) * 100
+                    if descent_from_peak >= self.LARGE_ASCENT_DESCENT_TOLERANCE:
+                        # 下降超过阈值，检查是否满足大爬升条件
+                        total_ascent = ascent_peak.elevation - ascent_start.elevation
+                        if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
                             terrain_changes.append(TerrainChange(
                                 change_type="大爬升",
-                                start_point=current_ascent_start,
-                                end_point=Point3D(
-                                    lat=p2.lat, lon=p2.lon,
-                                    elevation=current_ascent_peak_elevation,
-                                    timestamp=None
-                                ),
-                                elevation_diff=ascent_diff,
-                                distance_m=ascent_distance,
-                                gradient_percent=gradient
+                                start_point=ascent_start,
+                                end_point=ascent_peak,
+                                elevation_diff=total_ascent,
+                                distance_m=ascent_distance_m,
+                                gradient_percent=(total_ascent / ascent_distance_m * 100) if ascent_distance_m > 0 else 0
                             ))
-                    current_ascent_start = None
-                    current_ascent_peak_elevation = -float('inf')
+                        # 重置爬升段
+                        ascent_start = None
+                        ascent_peak = None
+                        ascent_distance_m = 0.0
 
-        # 处理最后一个未结束的段
-        if current_ascent_start is not None:
-            ascent_diff = current_ascent_peak_elevation - current_ascent_start.elevation
-            if ascent_diff >= self.LARGE_ASCENT_THRESHOLD:
-                ascent_distance = self._haversine_distance(
-                    current_ascent_start.lat, current_ascent_start.lon,
-                    points[-1].lat, points[-1].lon
-                )
-                if ascent_distance > 0:
-                    gradient = (ascent_diff / ascent_distance) * 100
-                    terrain_changes.append(TerrainChange(
-                        change_type="大爬升",
-                        start_point=current_ascent_start,
-                        end_point=Point3D(
-                            lat=points[-1].lat, lon=points[-1].lon,
-                            elevation=current_ascent_peak_elevation,
-                            timestamp=None
-                        ),
-                        elevation_diff=ascent_diff,
-                        distance_m=ascent_distance,
-                        gradient_percent=gradient
-                    ))
+                        # 开始新的下降段
+                        descent_start = p1
+                        descent_valley = p2
+                        descent_distance_m = distance
+                        descent_last_check_idx = i
+                    else:
+                        # 下降未超过阈值，继续爬升段（累计下降量）
+                        ascent_distance_m += distance
 
-        if current_descent_start is not None:
-            descent_diff = current_descent_valley_elevation - current_descent_start.elevation
-            if abs(descent_diff) >= self.LARGE_DESCENT_THRESHOLD:
-                descent_distance = self._haversine_distance(
-                    current_descent_start.lat, current_descent_start.lon,
-                    points[-1].lat, points[-1].lon
-                )
-                if descent_distance > 0:
-                    gradient = (abs(descent_diff) / descent_distance) * 100
-                    terrain_changes.append(TerrainChange(
-                        change_type="大下降",
-                        start_point=current_descent_start,
-                        end_point=Point3D(
-                            lat=points[-1].lat, lon=points[-1].lon,
-                            elevation=current_descent_valley_elevation,
-                            timestamp=None
-                        ),
-                        elevation_diff=abs(descent_diff),
-                        distance_m=descent_distance,
-                        gradient_percent=gradient
-                    ))
+                # 处理下降段
+                if descent_start is None:
+                    descent_start = p1
+                    descent_valley = p2
+                    descent_distance_m = distance
+                    descent_last_check_idx = i
+                else:
+                    descent_distance_m += distance
+                    if p2.elevation < descent_valley.elevation:
+                        descent_valley = p2
+
+            # ========== 坡度检查（1km 内变化不超过 40m 则中断） ==========
+            # 检查爬升段
+            if ascent_start is not None and ascent_distance_m >= self.GRADIENT_CHECK_DISTANCE_M:
+                # 找到 1km 前的点
+                check_distance = 0.0
+                check_idx = i
+                for j in range(i, ascent_last_check_idx, -1):
+                    if j > 0:
+                        seg_dist = self._haversine_distance(
+                            points[j-1].lat, points[j-1].lon,
+                            points[j].lat, points[j].lon
+                        )
+                        check_distance += seg_dist
+                        if check_distance >= self.GRADIENT_CHECK_DISTANCE_M:
+                            check_idx = j
+                            break
+
+                # 计算这 1km 内的海拔变化
+                elev_change = abs(points[i+1].elevation - points[check_idx].elevation)
+                if elev_change < self.MIN_GRADIENT_THRESHOLD_M:
+                    # 坡度太缓，中断当前爬升段
+                    total_ascent = ascent_peak.elevation - ascent_start.elevation
+                    if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
+                        terrain_changes.append(TerrainChange(
+                            change_type="大爬升",
+                            start_point=ascent_start,
+                            end_point=ascent_peak,
+                            elevation_diff=total_ascent,
+                            distance_m=ascent_distance_m,
+                            gradient_percent=(total_ascent / ascent_distance_m * 100) if ascent_distance_m > 0 else 0
+                        ))
+                    # 从中断点重新开始
+                    ascent_start = points[check_idx]
+                    ascent_peak = points[i+1]
+                    ascent_distance_m = self._haversine_distance(
+                        points[check_idx].lat, points[check_idx].lon,
+                        points[i+1].lat, points[i+1].lon
+                    )
+                    ascent_last_check_idx = i
+
+            # 检查下降段
+            if descent_start is not None and descent_distance_m >= self.GRADIENT_CHECK_DISTANCE_M:
+                # 找到 1km 前的点
+                check_distance = 0.0
+                check_idx = i
+                for j in range(i, descent_last_check_idx, -1):
+                    if j > 0:
+                        seg_dist = self._haversine_distance(
+                            points[j-1].lat, points[j-1].lon,
+                            points[j].lat, points[j].lon
+                        )
+                        check_distance += seg_dist
+                        if check_distance >= self.GRADIENT_CHECK_DISTANCE_M:
+                            check_idx = j
+                            break
+
+                # 计算这 1km 内的海拔变化
+                elev_change = abs(points[i+1].elevation - points[check_idx].elevation)
+                if elev_change < self.MIN_GRADIENT_THRESHOLD_M:
+                    # 坡度太缓，中断当前下降段
+                    total_descent = descent_start.elevation - descent_valley.elevation
+                    if total_descent > self.LARGE_DESCENT_THRESHOLD:
+                        terrain_changes.append(TerrainChange(
+                            change_type="大下降",
+                            start_point=descent_start,
+                            end_point=descent_valley,
+                            elevation_diff=total_descent,
+                            distance_m=descent_distance_m,
+                            gradient_percent=(total_descent / descent_distance_m * 100) if descent_distance_m > 0 else 0
+                        ))
+                    # 从中断点重新开始
+                    descent_start = points[check_idx]
+                    descent_valley = points[i+1]
+                    descent_distance_m = self._haversine_distance(
+                        points[check_idx].lat, points[check_idx].lon,
+                        points[i+1].lat, points[i+1].lon
+                    )
+                    descent_last_check_idx = i
+
+        # ========== 处理最后一个未结束的段 ==========
+        if ascent_start is not None and ascent_peak is not None:
+            total_ascent = ascent_peak.elevation - ascent_start.elevation
+            if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
+                terrain_changes.append(TerrainChange(
+                    change_type="大爬升",
+                    start_point=ascent_start,
+                    end_point=ascent_peak,
+                    elevation_diff=total_ascent,
+                    distance_m=ascent_distance_m,
+                    gradient_percent=(total_ascent / ascent_distance_m * 100) if ascent_distance_m > 0 else 0
+                ))
+
+        if descent_start is not None and descent_valley is not None:
+            total_descent = descent_start.elevation - descent_valley.elevation
+            if total_descent > self.LARGE_DESCENT_THRESHOLD:
+                terrain_changes.append(TerrainChange(
+                    change_type="大下降",
+                    start_point=descent_start,
+                    end_point=descent_valley,
+                    elevation_diff=total_descent,
+                    distance_m=descent_distance_m,
+                    gradient_percent=(total_descent / descent_distance_m * 100) if descent_distance_m > 0 else 0
+                ))
 
         # 计算平均海拔
         avg_elevation = sum(p.elevation for p in points) / len(points)

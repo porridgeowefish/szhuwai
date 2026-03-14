@@ -104,8 +104,8 @@ class WeatherClient(BaseAPIClient):
                 humidity=day_data["humidity"],
                 precip=day_data.get("precip", 0),
                 pressure=day_data.get("pressure", 0),
-                uvIndex=day_data.get("uvIndex", 0),
-                vis=day_data.get("vis", 0),
+                uvIndex=day_data.get("uvIndex"),  # API不返回时为 None
+                vis=day_data.get("vis"),          # API不返回时为 None
                 cloud=day_data.get("cloud"),
                 sunrise=day_data.get("sunrise"),
                 sunset=day_data.get("sunset")
@@ -139,8 +139,8 @@ class WeatherClient(BaseAPIClient):
                 humidity=day_data["humidity"],
                 precip=day_data.get("precip", 0),
                 pressure=day_data.get("pressure", 0),
-                uvIndex=day_data.get("uvIndex", 0),
-                vis=day_data.get("vis", 0),
+                uvIndex=day_data.get("uvIndex"),  # API不返回时为 None
+                vis=day_data.get("vis"),          # API不返回时为 None
                 cloud=day_data.get("cloud"),
                 sunrise=day_data.get("sunrise"),
                 sunset=day_data.get("sunset")

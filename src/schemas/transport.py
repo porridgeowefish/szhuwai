@@ -96,7 +96,8 @@ class DrivingRoute(BaseModel):
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
     distance_km: float = Field(..., ge=0, description="距离（公里）")
-    tolls_yuan: int = Field(..., ge=0, description="过路费（元）")
+    tolls_yuan: int = Field(default=0, ge=0, description="过路费（元）")
+    taxi_cost_yuan: Optional[int] = Field(None, description="出租车预估费用（元）")
 
     @property
     def cost_per_km(self) -> float:
@@ -142,6 +143,9 @@ class TransportRoutes(BaseModel):
 
     # 打车费用
     taxi_cost_yuan: Optional[int] = Field(None, description="打车费用预估（元）")
+
+    # 多条公交路线（用于前端展示公交方案专栏）
+    transit_routes: Optional[List[TransitRoute]] = Field(None, description="多条公交路线方案")
 
     @property
     def has_return_route(self) -> bool:
@@ -201,6 +205,23 @@ class GeocodeResult(BaseModel):
         )
 
 
+class POIInfo(BaseModel):
+    """POI 信息"""
+    name: str = Field(..., description="POI名称")
+    type: Optional[str] = Field(None, description="POI类型")
+    typecode: Optional[str] = Field(None, description="POI类型编码")
+    address: Optional[str] = Field(None, description="POI地址")
+    location: Optional[str] = Field(None, description="POI坐标")
+    distance: Optional[float] = Field(None, description="距离中心点距离(米)")
+
+
+class RoadInfo(BaseModel):
+    """道路信息"""
+    name: str = Field(..., description="道路名称")
+    distance: Optional[float] = Field(None, description="距离中心点距离(米)")
+    direction: Optional[str] = Field(None, description="道路方向")
+
+
 class ReverseGeocodeResult(BaseModel):
     """逆地理编码结果"""
     address: str = Field(..., description="地址")
@@ -209,10 +230,14 @@ class ReverseGeocodeResult(BaseModel):
     district: str = Field(..., description="区县")
     adcode: str = Field(..., description="行政区划代码")
     township: Optional[str] = Field(None, description="乡镇")
+    neighborhood: Optional[str] = Field(None, description="社区/小区")
     street_number: Optional[str] = Field(None, description="门牌号")
     building: Optional[str] = Field(None, description="建筑物")
     lon: float = Field(..., description="经度", ge=-180, le=180)
     lat: float = Field(..., description="纬度", ge=-90, le=90)
+    # 新增字段：用于精准定位
+    pois: List[POIInfo] = Field(default_factory=list, description="周边POI列表")
+    roads: List[RoadInfo] = Field(default_factory=list, description="周边道路列表")
 
     @field_validator('adcode')
     @classmethod
@@ -240,3 +265,31 @@ class ReverseGeocodeResult(BaseModel):
         if self.street_number:
             parts.append(self.street_number)
         return ' '.join(filter(None, parts))
+
+    def get_precise_location_name(self) -> str:
+        """
+        获取精准位置名称（按优先级提取）
+
+        优先级：
+        1. 50米内有POI，取最近的POI名称
+        2. 有道路信息，取道路名称
+        3. 乡镇+社区
+        4. 坐标格式化
+        """
+        # 优先1：50米内的POI
+        for poi in self.pois:
+            if poi.distance is not None and poi.distance < 50:
+                return poi.name
+
+        # 优先2：道路名称
+        if self.roads:
+            return self.roads[0].name
+
+        # 优先3：乡镇+社区
+        if self.township and self.neighborhood:
+            return f"{self.township}{self.neighborhood}"
+        if self.township:
+            return self.township
+
+        # 兜底：坐标格式化
+        return f"坐标({self.lon:.6f},{self.lat:.6f})"

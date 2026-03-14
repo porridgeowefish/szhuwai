@@ -238,8 +238,8 @@ class BaseAPIClient(ABC):
         if headers:
             request_headers.update(headers)
 
-        # 设置代理
-        proxies = None
+        # 设置代理：默认强制绕过系统代理
+        proxies = {"http": None, "https": None}  # 显式禁用系统代理
         if self.config.should_use_proxy():
             proxies = self.config.PROXY
 

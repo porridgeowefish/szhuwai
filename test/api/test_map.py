@@ -107,14 +107,12 @@ class TestMapClient:
             "status": "1",
             "info": "OK",
             "route": {
-                "transfers": [
+                "transits": [
                     {
                         "distance": 10000,
                         "duration": 3600,
-                        "price": 4,
+                        "cost": "4",
                         "walking_distance": 1000,
-                        "departure_stop": "国贸桥",
-                        "arrival_stop": "西直门",
                         "segments": [
                             {
                                 "bus": {
@@ -122,50 +120,22 @@ class TestMapClient:
                                         {
                                             "name": "地铁1号线",
                                             "id": "1101",
-                                            "departure_stop": "国贸",
-                                            "arrival_stop": "西直门",
+                                            "departure_stop": {"name": "国贸"},
+                                            "arrival_stop": {"name": "西直门"},
                                             "operator": "北京地铁"
                                         }
                                     ]
                                 },
                                 "duration": 3000,
                                 "distance": 9000,
-                                "price": 3,
-                                "walk_steps": [
-                                    {
-                                        "instruction": "步行到地铁站",
-                                        "distance": 100,
-                                        "duration": 300,
-                                        "action": "步行",
-                                        "orientation": "北",
-                                        "road_name": "建国门外大街"
-                                    }
-                                ]
-                            },
-                            {
-                                "walk": {
-                                    "walk_steps": [
-                                        {
-                                            "instruction": "步行到出口",
-                                            "distance": 100,
-                                            "duration": 300,
-                                            "action": "步行",
-                                            "orientation": "东",
-                                            "road_name": "西直门外大街"
-                                        }
-                                    ]
-                                },
-                                "duration": 300,
-                                "distance": 1000,
-                                "price": 1,
-                                "walking_distance": 1000
+                                "price": "3"
                             }
                         ]
                     },
                     {
                         "distance": 12000,
                         "duration": 4200,
-                        "price": 5,
+                        "cost": "5",
                         "walking_distance": 1500,
                         "segments": [
                             {
@@ -174,32 +144,22 @@ class TestMapClient:
                                         {
                                             "name": "特8路",
                                             "id": "T8",
-                                            "departure_stop": "国贸桥",
-                                            "arrival_stop": "动物园",
+                                            "departure_stop": {"name": "国贸桥"},
+                                            "arrival_stop": {"name": "动物园"},
                                             "operator": "北京公交"
                                         }
                                     ]
                                 },
                                 "duration": 3600,
                                 "distance": 10000,
-                                "price": 4,
-                                "walk_steps": [
-                                    {
-                                        "instruction": "步行到公交站",
-                                        "distance": 200,
-                                        "duration": 600,
-                                        "action": "步行",
-                                        "orientation": "南",
-                                        "road_name": "东三环中路"
-                                    }
-                                ]
+                                "price": "4"
                             }
                         ]
                     },
                     {
                         "distance": 15000,
                         "duration": 4800,
-                        "price": 6,
+                        "cost": "6",
                         "walking_distance": 2000,
                         "segments": [
                             {
@@ -208,25 +168,15 @@ class TestMapClient:
                                         {
                                             "name": "地铁10号线",
                                             "id": "1010",
-                                            "departure_stop": "国贸",
-                                            "arrival_stop": "知春路",
+                                            "departure_stop": {"name": "国贸"},
+                                            "arrival_stop": {"name": "知春路"},
                                             "operator": "北京地铁"
                                         }
                                     ]
                                 },
                                 "duration": 3000,
                                 "distance": 8000,
-                                "price": 3,
-                                "walk_steps": [
-                                    {
-                                        "instruction": "步行到地铁站",
-                                        "distance": 100,
-                                        "duration": 300,
-                                        "action": "步行",
-                                        "orientation": "南",
-                                        "road_name": "国贸桥"
-                                    }
-                                ]
+                                "price": "3"
                             }
                         ]
                     }
@@ -251,38 +201,28 @@ class TestMapClient:
             "status": "1",
             "info": "OK",
             "route": {
-                "transfers": [
+                "transits": [
                     {
                         "distance": 10000,
                         "duration": 3600,
-                        "price": 4,
+                        "cost": "4",
                         "walking_distance": 1000,
-                        "departure_stop": "国贸桥",
-                        "arrival_stop": "西直门",
                         "segments": [
                             {
-                                "railway": {
-                                    "subway": {
-                                        "name": "地铁4号线大兴线",
-                                        "id": "D4",
-                                        "departure_stop": "宣武门",
-                                        "arrival_stop": "西单",
-                                        "operator": "北京地铁"
-                                    }
+                                "bus": {
+                                    "buslines": [
+                                        {
+                                            "name": "地铁4号线大兴线",
+                                            "id": "D4",
+                                            "departure_stop": {"name": "宣武门"},
+                                            "arrival_stop": {"name": "西单"},
+                                            "operator": "北京地铁"
+                                        }
+                                    ]
                                 },
                                 "duration": 2400,
                                 "distance": 6000,
-                                "price": 3,
-                                "walk_steps": [
-                                    {
-                                        "instruction": "步行到地铁站",
-                                        "distance": 100,
-                                        "duration": 300,
-                                        "action": "步行",
-                                        "orientation": "北",
-                                        "road_name": "宣武门东大街"
-                                    }
-                                ]
+                                "price": "3"
                             },
                             {
                                 "bus": {
@@ -290,25 +230,15 @@ class TestMapClient:
                                         {
                                             "name": "特8路",
                                             "id": "T8",
-                                            "departure_stop": "西单",
-                                            "arrival_stop": "西直门",
+                                            "departure_stop": {"name": "西单"},
+                                            "arrival_stop": {"name": "西直门"},
                                             "operator": "北京公交"
                                         }
                                     ]
                                 },
                                 "duration": 1200,
                                 "distance": 4000,
-                                "price": 1,
-                                "walk_steps": [
-                                    {
-                                        "instruction": "换乘特8路",
-                                        "distance": 100,
-                                        "duration": 300,
-                                        "action": "步行",
-                                        "orientation": "北",
-                                        "road_name": "复兴门内大街"
-                                    }
-                                ]
+                                "price": "1"
                             }
                         ]
                     }
@@ -322,7 +252,7 @@ class TestMapClient:
 
         route = routes[0]
         assert len(route.segments) == 2
-        assert route.segments[0].type == "subway"
+        assert route.segments[0].type == "subway"  # 包含"地铁"字样
         assert route.segments[0].line_name == "地铁4号线大兴线"
         assert route.segments[0].departure_stop == "宣武门"
         assert route.segments[0].arrival_stop == "西单"
@@ -330,7 +260,7 @@ class TestMapClient:
         assert route.segments[1].line_name == "特8路"
         assert route.segments[1].departure_stop == "西单"
         assert route.segments[1].arrival_stop == "西直门"
-        assert route.departure_stop == "国贸桥"
+        assert route.departure_stop == "宣武门"
         assert route.arrival_stop == "西直门"
         assert route.line_name == "地铁4号线大兴线"
 
@@ -389,20 +319,13 @@ class TestMapClient:
                 "status": "1",
                 "info": "OK",
                 "route": {
+                    "taxi_cost": "45",
                     "paths": [
                         {
                             "distance": 15000,
                             "duration": 1800,
                             "tolls": 10,
-                            "traffic_lights": 5,
-                            "steps": [
-                                {
-                                    "instruction": "出发",
-                                    "distance": 100,
-                                    "duration": 60,
-                                    "action": "出发"
-                                }
-                            ]
+                            "traffic_lights": 5
                         }
                     ]
                 }
@@ -415,15 +338,7 @@ class TestMapClient:
                     "paths": [
                         {
                             "distance": 500,
-                            "duration": 400,
-                            "steps": [
-                                {
-                                    "instruction": "步行",
-                                    "distance": 500,
-                                    "duration": 400,
-                                    "action": "步行"
-                                }
-                            ]
+                            "duration": 400
                         }
                     ]
                 }
@@ -433,29 +348,27 @@ class TestMapClient:
                 "status": "1",
                 "info": "OK",
                 "route": {
-                    "transfers": [
+                    "transits": [
                         {
                             "distance": 10000,
                             "duration": 3600,
-                            "price": 4,
+                            "cost": "4",
                             "walking_distance": 1000,
-                            "departure_stop": "国贸桥",
-                            "arrival_stop": "西直门",
                             "segments": [
                                 {
                                     "bus": {
                                         "buslines": [
                                             {
                                                 "name": "地铁1号线",
-                                                "departure_stop": "国贸",
-                                                "arrival_stop": "西直门",
+                                                "departure_stop": {"name": "国贸"},
+                                                "arrival_stop": {"name": "西直门"},
                                                 "operator": "北京地铁"
                                             }
                                         ]
                                     },
                                     "duration": 3000,
                                     "distance": 9000,
-                                    "price": 3
+                                    "price": "3"
                                 }
                             ]
                         }
@@ -471,8 +384,8 @@ class TestMapClient:
         assert isinstance(result, TransportRoutes)
         assert result.outbound["driving"]["tolls_yuan"] == 10
         assert result.outbound["transit"]["cost_yuan"] == 4
-        assert result.taxi_cost_yuan == 10
-        assert result.outbound["transit"]["segments"][0]["line_name"] == "地铁1号线"
+        # taxi_cost 从 route.taxi_cost 获取
+        assert result.outbound["driving"]["taxi_cost_yuan"] == 45
 
     @patch('src.api.map_client.MapClient._make_request')
     def test_retry_mechanism(self, mock_request):
@@ -505,7 +418,7 @@ class TestMapClient:
             "status": "1",
             "info": "OK",
             "route": {
-                "transfers": []
+                "transits": []
             }
         }
 

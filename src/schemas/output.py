@@ -7,7 +7,7 @@ Final delivery schemas for the Outdoor Activity Planner.
 
 from datetime import datetime
 from enum import Enum
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
@@ -26,12 +26,19 @@ class PlanningContext(BaseModel):
 
     # 原始请求
     raw_request: str = Field(..., description="用户原始请求")
+    additional_info: str = Field(default="", description="用户额外要求/补充信息")
+
+    # 精准位置名称（用于搜索和 LLM Context）
+    precise_location_name: str = Field(default="", description="轨迹起点的精准位置名称")
 
     # 原始 API 数据
     track_analysis_raw: TrackAnalysisResult = Field(..., description="完整的轨迹分析结果")
     weather_raw: WeatherSummary = Field(..., description="完整的天气预报对象")
     transport_raw: TransportRoutes = Field(..., description="完整的交通API响应")
     search_raw: List[WebSearchResponse] = Field(default_factory=list, description="完整的网页搜索响应")
+
+    # 高德周边救援数据（硬核数据，非 Web 搜索）
+    around_rescue_data: List[Dict] = Field(default_factory=list, description="高德周边医院/派出所数据")
 
     # 可信度评分（内部打点使用）
     confidence_score: float = Field(..., ge=0, le=1, description="方案可信度评分")
@@ -132,6 +139,37 @@ class GridPointWeather(BaseModel):
     humidity: int = Field(..., description="相对湿度 (%)")
 
 
+class TerrainSegment(BaseModel):
+    """地形分析路段"""
+    change_type: Literal["大爬升", "大下降"] = Field(..., description="地形变化类型")
+    elevation_diff: float = Field(..., description="海拔变化量 (米)")
+    distance_m: float = Field(..., description="路段距离 (米)")
+    gradient_percent: float = Field(..., description="坡度百分比")
+
+
+class CloudSeaAssessment(BaseModel):
+    """云海评估"""
+    score: int = Field(default=0, ge=0, le=10, description="云海指数 (0-10)")
+    level: str = Field(default="暂无数据", description="云海等级")
+    factors: List[str] = Field(default_factory=list, description="影响因素")
+
+
+class TrackDetailAnalysis(BaseModel):
+    """轨迹详细分析"""
+    total_distance_km: float = Field(..., description="总里程 (公里)")
+    total_ascent_m: float = Field(..., description="总累计爬升 (米)")
+    total_descent_m: float = Field(..., description="总累计下降 (米)")
+    max_elevation_m: float = Field(..., description="最高海拔 (米)")
+    min_elevation_m: float = Field(..., description="最低海拔 (米)")
+    avg_elevation_m: float = Field(..., description="平均海拔 (米)")
+    difficulty_level: str = Field(..., description="难度等级")
+    difficulty_score: float = Field(..., description="难度评分")
+    estimated_duration_hours: float = Field(..., description="预计用时 (小时)")
+    safety_risk: str = Field(..., description="安全风险等级")
+    terrain_analysis: List[TerrainSegment] = Field(default_factory=list, description="地形分析")
+    cloud_sea_assessment: Optional[CloudSeaAssessment] = Field(None, description="云海评估")
+
+
 class ScenicSpot(BaseModel):
     """风景点"""
     name: str = Field(..., description="景点名称")
@@ -189,3 +227,9 @@ class OutdoorActivityPlan(BaseModel):
     safety_issues: List[SafetyIssue] = Field(default_factory=list, description="具体安全风险点")
     risk_factors: List[str] = Field(default_factory=list, description="风险因素标签")
     emergency_rescue_contacts: List[EmergencyRescueContact] = Field(default_factory=list, description="公共/应急救援电话")
+
+    # 6. 轨迹详细分析
+    track_detail: Optional[TrackDetailAnalysis] = Field(None, description="轨迹详细分析数据")
+
+    # 7. 交通方案详情
+    transport_scheme: Optional[TransportRoutes] = Field(None, description="交通方案详情（多种交通方式）")

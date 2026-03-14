@@ -19,7 +19,9 @@ from src.schemas.transport import (
     WalkingRoute,
     TransportRoutes,
     GeocodeResult,
-    ReverseGeocodeResult
+    ReverseGeocodeResult,
+    POIInfo,
+    RoadInfo
 )
 
 logger = logging.getLogger(__name__)
@@ -75,10 +77,30 @@ class MapClient(BaseAPIClient):
         return wrapper
 
     def validate_response(self, response: Dict) -> bool:
-        """验证API响应格式"""
-        if "status" not in response:
-            return False
-        return response["status"] == "1"
+        """
+        验证API响应格式
+
+        高德API有多种响应格式：
+        - 大部分接口返回 status="1" 表示成功
+        - 部分接口返回 info="OK" 或 info="ok" 表示成功
+        - 地理编码等接口返回的顶层可能没有status，但在内部字段
+        """
+        # 情况1：标准 status 字段
+        if "status" in response:
+            return response["status"] == "1"
+
+        # 情况2：info 字段（路径规划等接口）
+        if "info" in response:
+            return response["info"].lower() == "ok"
+
+        # 情况3：地理编码等接口，检查是否有有效数据
+        # 如果响应中包含 geocodes、regeocode、route 等字段，认为有效
+        valid_keys = ["geocodes", "regeocode", "route", "pois", "suggestions"]
+        if any(key in response for key in valid_keys):
+            return True
+
+        # 其他情况认为无效
+        return False
 
     def parse_error(self, response: Dict) -> str:
         """解析错误信息"""
@@ -154,21 +176,61 @@ class MapClient(BaseAPIClient):
         )
 
     @handle_api_errors
-    def reverse_geocode(self, location: str, extensions: str = "all") -> ReverseGeocodeResult:
-        """逆地理编码：坐标转地址"""
+    def reverse_geocode(self, location: str, extensions: str = "all",
+                        max_retries: int = 3) -> ReverseGeocodeResult:
+        """
+        逆地理编码：坐标转地址（核心功能）
+
+        Args:
+            location: 经度,纬度 (GCJ02坐标系)
+            extensions: 返回数据详细程度 (base/all)，默认 all 以获取 POI 和道路信息
+            max_retries: 最大重试次数
+
+        Returns:
+            ReverseGeocodeResult: 包含省/市/区/乡镇/POI/道路等详细地名
+
+        Raises:
+            APIError: 坐标格式错误或API调用失败
+        """
         endpoint = "geocode/regeo"
+
+        # 1. 解析并验证坐标格式
+        try:
+            lon, lat = location.split(",")
+            lon, lat = float(lon), float(lat)
+        except (ValueError, AttributeError) as e:
+            raise APIError(f"无效的坐标格式: {location}", 0, {})
+
+        # 2. 坐标范围验证（中国境内GCJ02）
+        if not (72 < lon < 137 and 0 < lat < 56):
+            logger.warning(f"坐标可能不在中境: {location}")
+
+        # 强制使用 extensions=all 以获取完整数据
         params = {
             "location": location,
             "key": self.config.MAP_API_KEY,
-            "extensions": extensions,
+            "extensions": "all",  # 强制使用 all
             "radius": "1000",
             "roadlevel": "0"
         }
 
-        response = self._make_request("GET", endpoint, params=params)
+        # 3. 带重试的请求
+        last_error = None
+        for attempt in range(max_retries):
+            try:
+                response = self._make_request("GET", endpoint, params=params)
+                break
+            except APIError as e:
+                last_error = e
+                if attempt < max_retries - 1:
+                    logger.warning(f"逆地理编码请求失败，第 {attempt + 1} 次重试: {str(e)}")
+                    time.sleep(1 * (2 ** attempt))  # 指数退避
+                    continue
+                raise
 
+        # 4. 解析返回数据（处理空列表问题）
         regeocode = response.get("regeocode", {})
-        address_component = regeocode.get("address_component", {})
+        address_component = regeocode.get("addressComponent", {})
 
         # 安全获取嵌套字典中的字符串
         def safe_get_nested_string(parent_key: str, child_key: str, default: str = "") -> str:
@@ -178,37 +240,110 @@ class MapClient(BaseAPIClient):
                 return self._safe_get_string(parent, child_key, default)
             return default
 
+        # 5. 处理直辖市（城市可能为空）
+        province = self._safe_get_string(address_component, "province")
+        city = self._safe_get_string(address_component, "city")
+        if not city:
+            city = province  # 直辖市的城市名等于省份名
+
+        # 6. 构建格式化地址（如果API未返回）
+        formatted_address = self._safe_get_string(regeocode, "formatted_address")
+        if not formatted_address:
+            district = self._safe_get_string(address_component, "district")
+            formatted_address = f"{province}{district}"
+
+        # 7. 解析 POI 列表（用于精准定位）
+        pois = []
+        pois_data = regeocode.get("pois", [])
+        if pois_data and isinstance(pois_data, list):
+            for poi in pois_data[:10]:  # 最多取前10个
+                try:
+                    distance_str = poi.get("distance", "9999")
+                    distance = float(distance_str) if distance_str else 9999.0
+                    pois.append(POIInfo(
+                        name=self._safe_get_string(poi, "name"),
+                        type=self._safe_get_string(poi, "type"),
+                        typecode=self._safe_get_string(poi, "typecode"),
+                        address=self._safe_get_string(poi, "address"),
+                        location=self._safe_get_string(poi, "location"),
+                        distance=distance
+                    ))
+                except Exception as e:
+                    logger.debug(f"解析POI失败: {e}")
+                    continue
+
+        # 8. 解析道路列表
+        roads = []
+        roads_data = regeocode.get("roads", [])
+        if roads_data and isinstance(roads_data, list):
+            for road in roads_data[:5]:  # 最多取前5条
+                try:
+                    distance_str = road.get("distance", "9999")
+                    distance = float(distance_str) if distance_str else None
+                    roads.append(RoadInfo(
+                        name=self._safe_get_string(road, "name"),
+                        distance=distance,
+                        direction=self._safe_get_string(road, "direction")
+                    ))
+                except Exception as e:
+                    logger.debug(f"解析道路失败: {e}")
+                    continue
+
+        # 9. 解析社区/小区信息
+        neighborhood = ""
+        neighborhood_data = address_component.get("neighborhood", {})
+        if isinstance(neighborhood_data, dict):
+            neighborhood = self._safe_get_string(neighborhood_data, "name")
+
         return ReverseGeocodeResult(
-            address=self._safe_get_string(regeocode, "formatted_address"),
-            province=self._safe_get_string(address_component, "province"),
-            city=self._safe_get_string(address_component, "city"),
+            address=formatted_address,
+            province=province,
+            city=city,
             district=self._safe_get_string(address_component, "district"),
             adcode=self._safe_get_string(address_component, "adcode"),
             township=self._safe_get_string(address_component, "township"),
-            street_number=safe_get_nested_string("streetNumber", "streetNumber"),
+            neighborhood=neighborhood,
+            street_number=safe_get_nested_string("streetNumber", "street"),
             building=safe_get_nested_string("building", "name"),
-            lon=float(location.split(",")[0]),
-            lat=float(location.split(",")[1])
+            lon=lon,
+            lat=lat,
+            pois=pois,
+            roads=roads
         )
 
     @handle_api_errors
     def driving_route(self, origin: str, destination: str,
-                     strategy: str = "LEAST_TIME") -> DrivingRoute:
-        """驾车路线规划（简化版，仅返回核心信息）"""
+                     strategy: int = 2) -> DrivingRoute:
+        """
+        驾车路线规划（简化版，仅返回核心信息）
+
+        Args:
+            origin: 起点坐标 "经度,纬度"
+            destination: 终点坐标 "经度,纬度"
+            strategy: 路线策略
+                - 0: 速度优先（时间）
+                - 1: 费用优先（不走收费路段的最快道路）
+                - 2: 距离优先（最短距离，不避开拥堵）
+                - 10: 返回单条结果（躲避拥堵）
+
+        Returns:
+            DrivingRoute: 包含驾车时间、距离、过路费、出租车预估费用
+        """
         endpoint = "direction/driving"
         params = {
             "origin": origin,
             "destination": destination,
             "key": self.config.MAP_API_KEY,
-            "strategy": strategy,
-            "extensions": "all"  # 改为 all 获取完整信息
+            "strategy": str(strategy),
+            "extensions": "all",  # 必须为 all 才返回 taxi_cost
+            "nosteps": "1"  # 不返回详细步骤，减少数据量
         }
 
         response = self._make_request("GET", endpoint, params=params)
 
         # 防御性编程：检查返回状态
         info = response.get("info", "")
-        if info != "OK":
+        if info.lower() != "ok":
             raise APIError(f"高德地图 API 返回错误: {info} - {response.get('info_code', 'Unknown')}", 0, response)
 
         route = response.get("route", {})
@@ -219,11 +354,16 @@ class MapClient(BaseAPIClient):
 
         path = paths[0]
 
+        # 提取出租车费用（在 route 层级，不是 paths 里）
+        taxi_cost = route.get("taxi_cost")
+        taxi_cost_yuan = int(float(taxi_cost)) if taxi_cost else None
+
         return DrivingRoute(
             available=True,
             duration_min=int(int(path.get("duration", 0)) / 60),
             distance_km=float(int(path.get("distance", 0)) / 1000),
-            tolls_yuan=int(path.get("tolls", 0))
+            tolls_yuan=int(float(path.get("tolls", 0) or 0)),
+            taxi_cost_yuan=taxi_cost_yuan
         )
 
     @handle_api_errors
@@ -239,9 +379,9 @@ class MapClient(BaseAPIClient):
 
         response = self._make_request("GET", endpoint, params=params)
 
-        # 防御性编程：检查返回状态
+        # 防御性编程：检查返回状态（高德返回 info="ok" 小写）
         info = response.get("info", "")
-        if info != "OK":
+        if info.lower() != "ok":
             raise APIError(f"高德地图 API 返回错误: {info} - {response.get('info_code', 'Unknown')}", 0, response)
 
         route = response.get("route", {})
@@ -260,81 +400,108 @@ class MapClient(BaseAPIClient):
 
     @handle_api_errors
     def transit_route(self, origin: str, destination: str,
-                     city: str = None) -> List[TransitRoute]:
-        """公交路线规划 - 返回前3条路线（简化版，仅返回核心信息）"""
+                     city: str, strategy: int = 0) -> List[TransitRoute]:
+        """
+        公交路线规划 - 返回前3条路线（简化版，仅返回核心信息）
+
+        Args:
+            origin: 起点坐标 "经度,纬度"
+            destination: 终点坐标 "经度,纬度"
+            city: 城市名称或adcode（必填）
+            strategy: 路线策略
+                - 0: 最快捷
+                - 1: 最经济
+                - 2: 最少换乘
+                - 3: 最少步行
+
+        Returns:
+            List[TransitRoute]: 公交路线列表（最多3条）
+        """
         endpoint = "direction/transit/integrated"
         params = {
             "origin": origin,
             "destination": destination,
             "key": self.config.MAP_API_KEY,
+            "city": city,  # 必填参数
+            "strategy": str(strategy),
             "nightflag": "0",
-            "extensions": "all"  # 改为 all 获取完整信息
+            "extensions": "base"  # base 包含3个方案的基本信息
         }
-        if city:
-            params["city"] = city
 
         response = self._make_request("GET", endpoint, params=params)
 
         # 防御性编程：检查返回状态
         info = response.get("info", "")
-        if info != "OK":
+        if info.lower() != "ok":
             raise APIError(f"高德地图 API 返回错误: {info} - {response.get('info_code', 'Unknown')}", 0, response)
 
         route = response.get("route", {})
-        transfers = route.get("transfers", [])
+        # 注意：高德API返回的是 transits，不是 transfers
+        transits = route.get("transits", [])
 
-        if not transfers:
+        if not transits:
             return []
 
         routes = []
         # 取前3条路线
-        for transfer in transfers[:3]:
+        for transit in transits[:3]:
             segments = []
 
             # 解析公交段详细信息
-            for step_data in transfer.get("segments", []):
-                if step_data.get("bus") and step_data["bus"].get("buslines"):
-                    for busline in step_data["bus"]["buslines"]:
+            for step_data in transit.get("segments", []):
+                # 公交/地铁段
+                bus_info = step_data.get("bus", {})
+                buslines = bus_info.get("buslines", [])
+
+                if buslines:
+                    for busline in buslines:
+                        # 判断是地铁还是公交
+                        line_name = self._safe_get_string(busline, "name")
+                        is_subway = "地铁" in line_name or "轻轨" in line_name
+
+                        # 获取站点信息
+                        departure_stop_obj = busline.get("departure_stop", {})
+                        arrival_stop_obj = busline.get("arrival_stop", {})
+
                         segment = TransitSegment(
-                            type="bus",
-                            line_name=self._safe_get_string(busline, "name"),
+                            type="subway" if is_subway else "bus",
+                            line_name=line_name,
                             line_id=self._safe_get_string(busline, "id"),
-                            departure_stop=self._safe_get_string(busline, "departure_stop"),
-                            arrival_stop=self._safe_get_string(busline, "arrival_stop"),
-                            duration_min=int(step_data.get("duration", 0) / 60),
+                            departure_stop=self._safe_get_string(departure_stop_obj, "name") if isinstance(departure_stop_obj, dict) else str(departure_stop_obj),
+                            arrival_stop=self._safe_get_string(arrival_stop_obj, "name") if isinstance(arrival_stop_obj, dict) else str(arrival_stop_obj),
+                            duration_min=int(int(step_data.get("duration", 0)) / 60),
                             distance_m=int(step_data.get("distance", 0)),
-                            price_yuan=int(step_data.get("price", 0)),
+                            price_yuan=int(float(step_data.get("price", 0) or 0)),
                             operator=self._safe_get_string(busline, "operator")
                         )
                         segments.append(segment)
 
-                # 地铁段
-                if step_data.get("railway") and step_data["railway"].get("subway"):
-                    subway_info = step_data["railway"]["subway"]
-                    segment = TransitSegment(
-                        type="subway",
-                        line_name=self._safe_get_string(subway_info, "name"),
-                        line_id=self._safe_get_string(subway_info, "id"),
-                        departure_stop=self._safe_get_string(subway_info, "departure_stop"),
-                        arrival_stop=self._safe_get_string(subway_info, "arrival_stop"),
-                        duration_min=int(step_data.get("duration", 0) / 60),
-                        distance_m=int(step_data.get("distance", 0)),
-                        price_yuan=int(step_data.get("price", 0))
-                    )
-                    segments.append(segment)
+                # 步行段（如果有单独的步行段）
+                walking_info = step_data.get("walking", {})
+                if walking_info and walking_info.get("distance"):
+                    # 步行段不作为TransitSegment，但可以记录步行距离
 
-            route = TransitRoute(
+                    pass
+
+            # 获取票价
+            cost_str = transit.get("cost", "0")
+            try:
+                cost_yuan = int(float(cost_str)) if cost_str else 0
+            except (ValueError, TypeError):
+                cost_yuan = 0
+
+            transit_route = TransitRoute(
                 available=True,
-                duration_min=int(transfer.get("duration", 0) / 60),
-                distance_km=float(transfer.get("distance", 0) / 1000),
-                cost_yuan=int(transfer.get("price", 0)),
-                walking_distance=int(transfer.get("walking_distance", 0)),
+                duration_min=int(int(transit.get("duration", 0)) / 60),
+                distance_km=float(int(transit.get("distance", 0)) / 1000),
+                cost_yuan=cost_yuan,
+                walking_distance=int(transit.get("walking_distance", 0) or 0),
                 segments=segments if segments else None,
-                departure_stop=self._safe_get_string(transfer, "departure_stop"),
-                arrival_stop=self._safe_get_string(transfer, "arrival_stop"),
+                departure_stop=segments[0].departure_stop if segments else None,
+                arrival_stop=segments[-1].arrival_stop if segments else None,
                 line_name=segments[0].line_name if segments else None
             )
-            routes.append(route)
+            routes.append(transit_route)
 
         return routes
 
@@ -367,6 +534,69 @@ class MapClient(BaseAPIClient):
             params["bbox"] = bbox
 
         return self._make_request("GET", endpoint, params=params)
+
+    @handle_api_errors
+    def search_around(self, location: str, keywords: str,
+                      radius: int = 10000, page_size: int = 20) -> List[Dict]:
+        """
+        周边雷达搜索（关键字搜索周边的 POI）
+
+        Args:
+            location: 中心点坐标 "经度,纬度" (GCJ02坐标系)
+            keywords: 搜索关键词，多个用 "|" 分隔，如 "医院|诊所|派出所|公安局"
+            radius: 搜索半径（米），默认 10km
+            page_size: 每页返回结果数，最大 25
+
+        Returns:
+            List[Dict]: POI 列表，包含 name, address, location, distance, tel 等字段
+                        如果未搜索到结果，返回空列表 []
+
+        Raises:
+            APIError: API 调用失败
+        """
+        endpoint = "place/around"
+        params = {
+            "location": location,
+            "keywords": keywords,
+            "key": self.config.MAP_API_KEY,
+            "radius": str(radius),
+            "extensions": "all",  # 返回详细信息
+            "offset": str(min(page_size, 25))  # 高德限制最大25
+        }
+
+        response = self._make_request("GET", endpoint, params=params)
+
+        # 解析返回的 POI 列表
+        pois = response.get("pois", [])
+        if not pois:
+            logger.info(f"周边搜索未找到结果: keywords={keywords}, location={location}")
+            return []
+
+        results = []
+        for poi in pois:
+            try:
+                # 解析距离
+                distance_str = poi.get("distance", "")
+                distance = float(distance_str) if distance_str else None
+
+                results.append({
+                    "name": self._safe_get_string(poi, "name"),
+                    "type": self._safe_get_string(poi, "type"),
+                    "typecode": self._safe_get_string(poi, "typecode"),
+                    "address": self._safe_get_string(poi, "address"),
+                    "location": self._safe_get_string(poi, "location"),
+                    "distance": distance,
+                    "tel": self._safe_get_string(poi, "tel"),
+                    "pname": self._safe_get_string(poi, "pname"),  # 省
+                    "cityname": self._safe_get_string(poi, "cityname"),  # 市
+                    "adname": self._safe_get_string(poi, "adname"),  # 区
+                })
+            except Exception as e:
+                logger.debug(f"解析周边 POI 失败: {e}")
+                continue
+
+        logger.info(f"周边搜索找到 {len(results)} 个结果: keywords={keywords}")
+        return results
 
     @handle_api_errors
     def get_transport_routes(self, origin: str, destination: str,

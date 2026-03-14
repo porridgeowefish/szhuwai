@@ -36,8 +36,8 @@ class WeatherBaseDaily(BaseModel):
 
 class CityWeatherDaily(WeatherBaseDaily):
     """城市每日天气契约"""
-    uvIndex: int = Field(..., ge=0, le=15, description="紫外线指数")
-    vis: int = Field(..., ge=0, description="能见度 (km)")
+    uvIndex: Optional[int] = Field(None, ge=0, le=15, description="紫外线指数")
+    vis: Optional[int] = Field(None, ge=0, description="能见度 (km)")
     cloud: Optional[int] = Field(None, ge=0, le=100, description="云量 (%)")
     sunrise: Optional[str] = Field(None, description="日出时间")
     sunset: Optional[str] = Field(None, description="日落时间")
