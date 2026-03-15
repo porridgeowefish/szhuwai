@@ -19,7 +19,8 @@ from src.schemas.output import (
     OutdoorActivityPlan,
     PlanningContext,
     TrackDetailAnalysis,
-    TerrainSegment
+    TerrainSegment,
+    ElevationPoint
 )
 from src.schemas.weather import WeatherSummary
 from src.schemas.track import TrackAnalysisResult
@@ -27,12 +28,16 @@ from src.schemas.transport import TransportRoutes
 from src.schemas.search import WebSearchResponse
 
 from src.services.track_parser import TrackParser
+from src.services.weather_analyzer import WeatherAnalyzer
 from src.services.geo_coord_utils import wgs84_to_gcj02
 
 from src.api.weather_client import WeatherClient
 from src.api.map_client import MapClient
 from src.api.search_client import SearchClient
 from src.api.config import api_config
+
+# 导入提示词管理器
+from src.prompts import get_system_prompt, get_user_prompt
 
 
 class OutdoorPlannerRouter:
@@ -43,6 +48,7 @@ class OutdoorPlannerRouter:
         # 初始化服务
         self.track_parser = TrackParser()
         self.weather_client = WeatherClient()
+        self.weather_analyzer = WeatherAnalyzer()
         self.map_client = MapClient()
         self.search_client = SearchClient()
 
@@ -673,6 +679,57 @@ class OutdoorPlannerRouter:
             context=context
         )
 
+        # 计算云海指数（需要城市天气和最高点天气）
+        try:
+            if context.weather_raw and context.weather_raw.forecast_3d:
+                daily_list = context.weather_raw.forecast_3d.daily
+                if daily_list and len(daily_list) > 0:
+                    city_weather = daily_list[0]
+
+                    # 查找最高点天气
+                    summit_weather = None
+                    if context.weather_raw.grid_points:
+                        for pt in context.weather_raw.grid_points:
+                            if pt.get("point_type") == "最高点":
+                                # 创建临时对象用于计算
+                                summit_weather = type('SummitWeather', (), {
+                                    'tempMin': pt.get("temp", 20),
+                                    'humidity': pt.get("humidity", 50),
+                                    'windSpeedDay': 0
+                                })()
+                                break
+
+                    if summit_weather:
+                        cloud_sea_result = self.weather_analyzer.calculate_cloud_sea_probability(
+                            city_weather, summit_weather
+                        )
+
+                        # 创建云海评估对象
+                        from src.schemas.output import CloudSeaAssessment
+                        assessment = cloud_sea_result.get("assessment", "一般")
+                        probability = cloud_sea_result.get("probability", 0)
+                        factors = []
+                        if cloud_sea_result.get("conditions", {}).get("high_humidity"):
+                            factors.append("高湿度")
+                        if cloud_sea_result.get("conditions", {}).get("low_wind"):
+                            factors.append("低风速")
+                        if cloud_sea_result.get("conditions", {}).get("inversion_layer"):
+                            factors.append("逆温层")
+
+                        # 计算分数（0-10）
+                        score = round(probability / 10)
+
+                        # 更新 track_detail 中的云海评估
+                        if plan.track_detail:
+                            plan.track_detail.cloud_sea_assessment = CloudSeaAssessment(
+                                score=score,
+                                level=assessment,
+                                factors=factors
+                            )
+                        logger.info(f"云海指数计算完成: {assessment}, 分数={score}")
+        except Exception as e:
+            logger.warning(f"计算云海指数失败: {e}")
+
         logger.info("LLM 提炼完成")
         return plan
 
@@ -687,6 +744,10 @@ class OutdoorPlannerRouter:
             "Authorization": f"Bearer {api_config.LLM_API_KEY}"
         }
 
+        # 使用提示词管理器获取系统提示词
+        system_prompt = get_system_prompt()
+        logger.debug(f"系统提示词长度: {len(system_prompt)} 字符")
+
         # 构建请求体
         # 使用Pro/moonshotai/Kimi-K2.5 使用K2.5，最新模型
         payload = {
@@ -694,89 +755,7 @@ class OutdoorPlannerRouter:
             "messages": [
                 {
                     "role": "system",
-                    "content": """你是一个专业的户外活动规划助手。根据用户请求和收集到的数据（轨迹、天气、交通、安全信息），生成一个结构化的户外活动计划。
-
-请严格按照以下 JSON 格式输出户外活动计划，确保所有字段都正确填写。
-
-⚠️ 重要约束（必须遵守）：
-1. **equipment_recommendations 中的 category 字段必须从以下列表中选择**：
-   - 服装、鞋类、背包、露营装备、炊具、安全装备、导航工具、卫生用品、电子产品、其他
-   - 绝对不允许创造新分类！例如防晒霜归入"卫生用品"或"其他"
-
-2. **equipment_recommendations 中的 priority 字段必须从以下列表中选择**：
-   - 必需、推荐、可选
-
-3. **safety_issues 中的 type 字段必须从以下列表中选择**：
-   - 天气风险、地形风险、交通风险、野生动物风险、紧急情况、装备风险、身体条件风险
-
-4. **safety_issues 中的 severity 字段必须从以下列表中选择**：
-   - 低、中、高、极高
-
-5. **scenic_spots 中的 difficulty 字段必须从以下列表中选择**：
-   - 简单、中等、困难
-
-6. **overall_rating 和 safety_assessment 中的 recommendation 字段必须从以下列表中选择**：
-   - 推荐、谨慎推荐、不推荐
-
-7. **emergency_rescue_contacts 中的 type 字段必须从以下列表中选择**：
-   - 医疗、救援、报警
-
-8. **⚠️ 零幻觉原则**：请基于提供的真实轨迹指标（里程、爬升、海拔）进行风险评估。如果数据缺失，请报告数据不足，严禁编造轨迹指标或虚构数据。
-以下是一个样例json文件，请你作为生成参考。
-```json
-{
-    "plan_id": "计划ID",
-    "plan_name": "计划名称",
-    "overall_rating": "推荐|谨慎推荐|不推荐",
-    "track_overview": "轨迹概述，如：11km/爬升750m/困难",
-    "weather_overview": "天气概述，如：周末晴朗，最高25度，无降水风险",
-    "transport_overview": "交通概述，如：建议驾车，约1.5小时",
-    "trip_date_weather": {
-        "fxDate": "YYYY-MM-DD",
-        "tempMax": 25,
-        "tempMin": 15,
-        "textDay": "晴",
-        "windScaleDay": "3",
-        "windSpeedDay": 10,
-        "humidity": 50,
-        "precip": 0,
-        "pressure": 1013,
-        "uvIndex": 8,
-        "vis": 20
-    },
-    "hourly_weather": [
-        {"fxTime": "YYYY-MM-DDTHH:MM:SS", "temp": 18, "pop": 0, "precip": 0, "windScale": "2"}
-    ],
-    "critical_grid_weather": [
-        {"point_type": "起点|终点|最高点|中点", "temp": 18, "wind_scale": "2", "humidity": 65}
-    ],
-    "itinerary": [
-        {"time": "08:00", "activity": "活动内容", "location": "地点", "duration_minutes": 30, "notes": "备注"}
-    ],
-    "equipment_recommendations": [
-        {"name": "装备名称", "category": "服装|鞋类|背包|露营装备|炊具|安全装备|导航工具|卫生用品|电子产品|其他", "priority": "必需|推荐|可选", "quantity": 1, "weight_kg": 3, "description": "描述", "alternatives": ["替代品"]}
-    ],
-    "scenic_spots": [
-        {"name": "景点名称", "description": "景点描述", "location": {"lon": 116.4, "lat": 39.9, "elevation": 100}, "best_view_time": "10:00-14:00", "photo_spots": ["摄影点"], "difficulty": "简单|中等|困难", "estimated_visit_time_min": 30}
-    ],
-    "precautions": ["注意事项1", "注意事项2"],
-    "safety_assessment": {
-        "overall_risk": "低风险|中等风险|高风险",
-        "conditions": "条件描述",
-        "recommendation": "推荐|谨慎推荐|不推荐",
-        "risk_level": "低风险|中等风险|高风险"
-    },
-    "safety_issues": [
-        {"type": "天气风险|地形风险|交通风险|野生动物风险|紧急情况|装备风险|身体条件风险", "severity": "低|中|高|极高", "description": "问题描述", "mitigation": "缓解措施", "emergency_contact": "紧急联系方式"}
-    ],
-    "risk_factors": ["风险因素1", "风险因素2"],
-    "emergency_rescue_contacts": [
-        {"name": "救援机构名称", "phone": "电话", "type": "医疗|救援|报警"}
-    ]
-}
-```
-
-请根据以下上下文信息生成计划："""
+                    "content": system_prompt
                 },
                 {
                     "role": "user",
@@ -793,7 +772,7 @@ class OutdoorPlannerRouter:
             api_config.LLM_BASE_URL,
             headers=headers,
             json=payload,
-            timeout=60,
+            timeout=600,
             proxies=api_config.PROXY if api_config.should_use_proxy() else None
         )
 
@@ -833,7 +812,18 @@ class OutdoorPlannerRouter:
                     change_type=seg.change_type,
                     elevation_diff=round(seg.elevation_diff, 1),
                     distance_m=round(seg.distance_m, 1),
-                    gradient_percent=round(seg.gradient_percent, 1)
+                    gradient_percent=round(seg.gradient_percent, 1),
+                    start_distance_m=round(getattr(seg, 'start_distance_m', 0), 1)
+                ))
+
+            # 转换海拔轨迹点数据
+            elevation_points = []
+            for pt in track_raw.elevation_points:
+                elevation_points.append(ElevationPoint(
+                    distance_m=round(pt.distance_m, 1),
+                    elevation_m=round(pt.elevation_m, 1),
+                    is_key_point=pt.is_key_point,
+                    label=pt.label
                 ))
 
             # 创建轨迹详细分析（数据格式化到小数点后一位）
@@ -849,7 +839,8 @@ class OutdoorPlannerRouter:
                 estimated_duration_hours=round(track_raw.estimated_duration_hours, 1),
                 safety_risk=track_raw.safety_risk,
                 terrain_analysis=terrain_segments,
-                cloud_sea_assessment=None  # TODO: 后续可添加云海评估逻辑
+                elevation_points=elevation_points,
+                # 云海指数在 _llm_synthesis 中计算
             )
             plan_data["track_detail"] = track_detail.model_dump()
 
@@ -968,18 +959,32 @@ class OutdoorPlannerRouter:
         return "交通信息不可用"
 
     def _build_llm_prompt(self, context: PlanningContext) -> str:
-        """构建 LLM 提示"""
-        # 构建额外要求的提示部分
-        additional_info_section = ""
-        if context.additional_info and context.additional_info.strip():
-            additional_info_section = f"""
-## ⚠️ 用户额外要求（请在规划中重点考虑）
-{context.additional_info}
+        """构建 LLM 提示（使用提示词管理器）"""
 
-**重要提示**：请在行程安排、装备建议、注意事项等方面充分考虑上述用户的额外要求。
-"""
+        # ========== 准备轨迹分析信息 ==========
+        track_info = {
+            "total_distance_km": context.track_analysis_raw.total_distance_km,
+            "total_ascent_m": context.track_analysis_raw.total_ascent_m,
+            "total_descent_m": context.track_analysis_raw.total_descent_m,
+            "difficulty_level": context.track_analysis_raw.difficulty_level,
+            "weather_condition": context.weather_raw.summary.conditions if context.weather_raw and context.weather_raw.summary else '未知',
+            "transport_route": context.transport_raw.summary.total_distance if context.transport_raw and context.transport_raw.summary else '未知'
+        }
 
-        # 整理搜索结果，按类别分组
+        # ========== 准备24小时逐小时天气数据 ==========
+        hourly_weather_data = ""
+        if context.weather_raw and context.weather_raw.hourly_24h and context.weather_raw.hourly_24h.hourly:
+            for hour in context.weather_raw.hourly_24h.hourly:
+                time_str = hour.fxTime.split('T')[1][:5] if 'T' in hour.fxTime else hour.fxTime
+                hourly_weather_data += f"- {time_str}: 温度{hour.temp}°C, 降水概率{hour.pop}%, 降水量{hour.precip}mm, 风力{hour.windScale}级\n"
+
+        # ========== 准备多抽样点格点天气数据 ==========
+        grid_points_data = ""
+        if context.weather_raw and context.weather_raw.grid_points:
+            for point in context.weather_raw.grid_points:
+                grid_points_data += f"- **{point['point_type']}**: 温度{point['temp']}°C, 风力{point['wind_scale']}级, 湿度{point['humidity']}%\n"
+
+        # ========== 准备搜索结果数据 ==========
         scenic_results = []
         rescue_results = []
         guide_results = []
@@ -990,7 +995,6 @@ class OutdoorPlannerRouter:
             for result in search_response.results:
                 result_info = f"- {result.title}: {result.content[:150]}..."
 
-                # 根据搜索查询关键词分类
                 if '景点' in query or '景区' in query or '旅游' in query:
                     scenic_results.append(result_info)
                 elif '救援' in query or '蓝天' in query or '应急' in query:
@@ -1000,32 +1004,21 @@ class OutdoorPlannerRouter:
                 elif '装备' in query or '登山' in query or '露营' in query:
                     equipment_results.append(result_info)
 
-        # 构建搜索结果部分
-        search_section = "\n## 搜索参考信息\n"
-
+        search_content = ""
         if scenic_results:
-            search_section += "\n### 周边景区/景点\n"
-            search_section += "\n".join(scenic_results[:5]) + "\n"
-
+            search_content += "### 周边景区/景点\n" + "\n".join(scenic_results[:5]) + "\n"
         if rescue_results:
-            search_section += "\n### 应急救援信息（Web搜索）\n"
-            search_section += "\n".join(rescue_results[:5]) + "\n"
-
+            search_content += "### 应急救援信息（Web搜索）\n" + "\n".join(rescue_results[:5]) + "\n"
         if guide_results:
-            search_section += "\n### 徒步攻略参考\n"
-            search_section += "\n".join(guide_results[:5]) + "\n"
-
+            search_content += "### 徒步攻略参考\n" + "\n".join(guide_results[:5]) + "\n"
         if equipment_results:
-            search_section += "\n### 装备推荐参考\n"
-            search_section += "\n".join(equipment_results[:5]) + "\n"
+            search_content += "### 装备推荐参考\n" + "\n".join(equipment_results[:5]) + "\n"
 
-        # 构建高德周边救援数据部分（硬核数据）
-        around_rescue_section = ""
+        # ========== 准备高德周边救援数据 ==========
+        rescue_content = ""
         if context.around_rescue_data:
-            around_rescue_section = "\n## 🏥 高德地图周边救援数据（硬核数据，优先使用）\n"
-            around_rescue_section += f"**精准位置**: {context.precise_location_name}\n\n"
+            rescue_content = f"**精准位置**: {context.precise_location_name}\n\n"
 
-            # 按类型分组
             hospitals = []
             police = []
             for poi in context.around_rescue_data:
@@ -1042,78 +1035,23 @@ class OutdoorPlannerRouter:
                     police.append(f"- **{name}**: {address}, 距离{distance_str}" + (f", 电话: {tel}" if tel else ""))
 
             if hospitals:
-                around_rescue_section += "\n### 周边医院/诊所\n"
-                around_rescue_section += "\n".join(hospitals[:10]) + "\n"
-
+                rescue_content += "### 周边医院/诊所\n" + "\n".join(hospitals[:10]) + "\n"
             if police:
-                around_rescue_section += "\n### 周边派出所/公安局\n"
-                around_rescue_section += "\n".join(police[:5]) + "\n"
+                rescue_content += "### 周边派出所/公安局\n" + "\n".join(police[:5]) + "\n"
 
-            around_rescue_section += "\n**重要提示**：以上数据来自高德地图 API，是轨迹起点周边的真实救援设施，请优先将这些电话填入 emergency_rescue_contacts。\n"
+            rescue_content += "\n**重要提示**：以上数据来自高德地图 API，是轨迹起点周边的真实救援设施，请优先将这些电话填入 emergency_rescue_contacts。\n"
         else:
-            around_rescue_section = "\n## 🏥 高德地图周边救援数据\n无（10km范围内未搜索到医院/派出所，请使用 Web 搜索结果或通用报警电话）\n"
+            rescue_content = "无（10km范围内未搜索到医院/派出所，请使用 Web 搜索结果或通用报警电话）\n"
 
-        # 构建全天24小时逐小时天气数据部分
-        hourly_24h_section = ""
-        if context.weather_raw and context.weather_raw.hourly_24h and context.weather_raw.hourly_24h.hourly:
-            hourly_24h_section = "\n## 🕐 全天24小时逐小时天气预报（格点API，不基于活动时间）\n"
-            hourly_24h_section += "**重要**：请在 hourly_weather 字段中输出全天24小时的逐小时天气数据，不需要根据活动时间过滤。\n\n"
-            hourly_24h_section += "### 格点逐小时预报数据\n"
-            for hour in context.weather_raw.hourly_24h.hourly:
-                time_str = hour.fxTime.split('T')[1][:5] if 'T' in hour.fxTime else hour.fxTime
-                hourly_24h_section += f"- {time_str}: 温度{hour.temp}°C, 降水概率{hour.pop}%, 降水量{hour.precip}mm, 风力{hour.windScale}级\n"
+        # ========== 使用提示词管理器生成最终提示词 ==========
+        prompt = get_user_prompt(
+            raw_request=context.raw_request,
+            additional_info=context.additional_info,
+            track_info=track_info,
+            hourly_weather_data=hourly_weather_data,
+            grid_points_data=grid_points_data,
+            search_content=search_content,
+            rescue_content=rescue_content
+        )
 
-        # 构建多抽样点格点天气数据部分
-        grid_points_section = ""
-        if context.weather_raw and context.weather_raw.grid_points:
-            grid_points_section = "\n## 📍 多抽样点格点天气数据（格点API）\n"
-            grid_points_section += "**重要**：请在 critical_grid_weather 字段中包含以下所有抽样点的天气数据。\n\n"
-            grid_points_section += "### 各点位实时天气\n"
-            for point in context.weather_raw.grid_points:
-                grid_points_section += f"- **{point['point_type']}**: 温度{point['temp']}°C, 风力{point['wind_scale']}级, 湿度{point['humidity']}%\n"
-
-        prompt = f"""
-请根据以下户外活动规划信息，生成一个详细的户外活动计划：
-
-## 用户原始请求
-{context.raw_request}
-{additional_info_section}
-## 轨迹分析信息
-- 总距离：{context.track_analysis_raw.total_distance_km:.1f}公里
-- 总爬升：{context.track_analysis_raw.total_ascent_m}米
-- 总下降：{context.track_analysis_raw.total_descent_m}米
-- 难度：{context.track_analysis_raw.difficulty_level}
-- 天气条件：{context.weather_raw.summary.conditions if context.weather_raw and context.weather_raw.summary else '未知'}
-- 交通路线：{context.transport_raw.summary.total_distance if context.transport_raw and context.transport_raw.summary else '未知'}
-{hourly_24h_section}
-{grid_points_section}
-{search_section}
-{around_rescue_section}
-请按照 OutdoorActivityPlan 的结构化输出格式，生成一个完整的户外活动计划，包括：
-1. 基础信息（计划ID、创建时间、计划名称、推荐等级）
-2. 轨迹概述、天气概述、交通概述
-3. 天气数据（当天详细天气、逐小时天气、关键格点天气）
-4. 行程安排、装备建议、风景点推荐（请参考上述周边景区信息）
-5. 注意事项（请参考上述徒步攻略）、安全评估、安全风险点、风险因素标签
-6. 应急救援电话（**优先使用高德地图周边救援数据中的医院/派出所电话**，其次参考 Web 搜索结果）
-
-## 重要约束条件
-
-关于装备建议 (equipment_recommendations)：
-请注意，装备的 `category` 字段必须且只能从以下列表中选择：
-['服装', '鞋类', '背包', '露营装备', '炊具', '安全装备', '导航工具', '卫生用品', '电子产品', '其他']。
-
-绝对不允许创造新的分类！例如：
-- 如果建议带防晒霜、护肤品、面霜等，请归类到 "卫生用品"
-- 如果建议带登山杖、GPS等，请归类到 "导航工具"
-- 如果建议带急救包、手电筒等，请归类到 "安全装备"
-- 如果建议带其他未明确列出的物品，请归类到 "其他"
-
-## 零幻觉原则
-- 仅基于上述已知信息生成计划
-- 如果某些数据缺失（如无周边救援数据），请报告数据不足，严禁编造数据
-- 不要捏造轨迹指标、天气数据或救援电话
-
-请确保输出完全符合 OutdoorActivityPlan 的 JSON Schema。
-"""
         return prompt

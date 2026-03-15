@@ -157,6 +157,15 @@ class TerrainSegment(BaseModel):
     elevation_diff: float = Field(..., description="海拔变化量 (米)")
     distance_m: float = Field(..., description="路段距离 (米)")
     gradient_percent: float = Field(..., description="坡度百分比")
+    start_distance_m: float = Field(default=0, description="路段起点累计距离 (米)")
+
+
+class ElevationPoint(BaseModel):
+    """海拔轨迹点（用于前端可视化）"""
+    distance_m: float = Field(..., description="累计距离（米）")
+    elevation_m: float = Field(..., description="海拔（米）")
+    is_key_point: bool = Field(default=False, description="是否为关键点")
+    label: Optional[str] = Field(None, description="关键点标签")
 
 
 class CloudSeaAssessment(BaseModel):
@@ -179,23 +188,16 @@ class TrackDetailAnalysis(BaseModel):
     estimated_duration_hours: float = Field(..., description="预计用时 (小时)")
     safety_risk: str = Field(..., description="安全风险等级")
     terrain_analysis: List[TerrainSegment] = Field(default_factory=list, description="地形分析")
+    elevation_points: List[ElevationPoint] = Field(default_factory=list, description="海拔轨迹点（用于前端可视化）")
     cloud_sea_assessment: Optional[CloudSeaAssessment] = Field(None, description="云海评估")
 
 
 class ScenicSpot(BaseModel):
-    """风景点"""
+    """风景点 - 以科普和故事为核心，激发用户探索兴趣"""
     name: str = Field(..., description="景点名称")
-    description: str = Field(..., description="景点描述")
-    location: Point3D = Field(..., description="景点位置")
-    best_view_time: Optional[str] = Field(None, description="最佳观赏时间")
-    photo_spots: List[str] = Field(default_factory=list, description="摄影点")
-    difficulty: Literal["简单", "中等", "困难"] = Field(default="中等", description="到达难度")
-    estimated_visit_time_min: int = Field(default=30, ge=0, description="预计游览时间（分钟）")
-
-    @property
-    def is_worth_it(self) -> bool:
-        """是否值得推荐"""
-        return len(self.photo_spots) > 0 and self.difficulty != "困难"
+    spot_type: Literal["自然风光", "人文景观"] = Field(..., description="景点类型")
+    description: str = Field(..., description="景点描述（自然风光需科学科普，人文景观需讲述背后故事）")
+    location: Point3D = Field(..., description="景点位置坐标")
 
 
 class OutdoorActivityPlan(BaseModel):
@@ -225,6 +227,7 @@ class OutdoorActivityPlan(BaseModel):
     equipment_recommendations: List[EquipmentItem] = Field(default_factory=list, description="装备建议")
     scenic_spots: List[ScenicSpot] = Field(default_factory=list, description="风景点推荐")
     precautions: List[str] = Field(default_factory=list, description="注意事项")
+    hiking_advice: str = Field(default="", description="徒步建议（AI生成的综合建议，以叙事方式呈现）")
 
     # 5. 安全与应急
     safety_assessment: SafetyAssessment = Field(

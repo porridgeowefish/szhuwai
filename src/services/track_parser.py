@@ -18,7 +18,7 @@ from typing import List, Literal, Optional, Union
 from loguru import logger
 
 from src.schemas.base import Point3D
-from src.schemas.track import TrackAnalysisResult, TerrainChange
+from src.schemas.track import TrackAnalysisResult, TerrainChange, ElevationPoint
 
 
 class TrackParseError(Exception):
@@ -30,9 +30,11 @@ class TrackParser:
     """轨迹文件解析器"""
 
     # 业务规则常量 - 大爬升/大下降识别
+    # 大爬升：单次连续爬升超过300m，中间允许25m以内下降
+    # 大下降：单次连续下降超过300m，中间允许25m以内上升
     LARGE_ASCENT_THRESHOLD = 300  # 大爬升阈值：上升 >= 300m
-    LARGE_ASCENT_DESCENT_TOLERANCE = 15  # 大爬升时允许的最大下降： < 15m
-    LARGE_DESCENT_THRESHOLD = 400  # 大下降阈值：下降 > 400m
+    LARGE_ASCENT_DESCENT_TOLERANCE = 50  # 大爬升时允许的最大下降： < 50m
+    LARGE_DESCENT_THRESHOLD = 300  # 大下降阈值：下降 >= 300m
     LARGE_DESCENT_ASCENT_TOLERANCE = 50  # 大下降时允许的最大上升：< 50m
 
     # 中断条件
@@ -328,7 +330,7 @@ class TrackParser:
                 min_elev_point = p2
 
             # ========== 大爬升识别逻辑 ==========
-            # 规则：上升 >= 300m，下降 < 15m，算作连续大爬升
+            # 规则：上升 >= 300m，下降 < 25m，算作连续大爬升
             if elev_diff >= 0:
                 # 上升或平地
                 if ascent_start is None:
@@ -374,7 +376,9 @@ class TrackParser:
                     if descent_from_peak >= self.LARGE_ASCENT_DESCENT_TOLERANCE:
                         # 下降超过阈值，检查是否满足大爬升条件
                         total_ascent = ascent_peak.elevation - ascent_start.elevation
+                        logger.info(f"[大爬升检测] 检测到下降超过阈值({self.LARGE_ASCENT_DESCENT_TOLERANCE}m), 当前爬升={total_ascent}m, 阈值={self.LARGE_ASCENT_THRESHOLD}m")
                         if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
+                            logger.info(f"[大爬升检测] 识别到大爬升! 上升={total_ascent}m, 距离={ascent_distance_m}m")
                             terrain_changes.append(TerrainChange(
                                 change_type="大爬升",
                                 start_point=ascent_start,
@@ -488,8 +492,10 @@ class TrackParser:
                     descent_last_check_idx = i
 
         # ========== 处理最后一个未结束的段 ==========
+        logger.info(f"[大爬升检测] 轨迹结束，未结束的爬升段: start={ascent_start.elevation if ascent_start else None}m, peak={ascent_peak.elevation if ascent_peak else None}m")
         if ascent_start is not None and ascent_peak is not None:
             total_ascent = ascent_peak.elevation - ascent_start.elevation
+            logger.info(f"[大爬升检测] 最终爬升段: 上升={total_ascent}m, 距离={ascent_distance_m}m, 阈值={self.LARGE_ASCENT_THRESHOLD}m")
             if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
                 terrain_changes.append(TerrainChange(
                     change_type="大爬升",
@@ -514,6 +520,35 @@ class TrackParser:
 
         # 计算平均海拔
         avg_elevation = sum(p.elevation for p in points) / len(points)
+
+        # ========== 生成海拔轨迹点（用于前端可视化）==========
+        elevation_points = self._generate_elevation_points(
+            points, total_distance_m, max_elev_point, min_elev_point
+        )
+
+        # ========== 为地形变化段添加起点距离 ==========
+        # 计算每个点的累计距离
+        cumulative_distances = [0.0]
+        for i in range(len(points) - 1):
+            dist = self._haversine_distance(
+                points[i].lat, points[i].lon,
+                points[i+1].lat, points[i+1].lon
+            )
+            cumulative_distances.append(cumulative_distances[-1] + dist)
+
+        # 为每个地形变化段添加起点距离
+        for tc in terrain_changes:
+            # 找到起点在points中的索引
+            found = False
+            for idx, p in enumerate(points):
+                if (abs(p.lat - tc.start_point.lat) < 1e-5 and
+                    abs(p.lon - tc.start_point.lon) < 1e-5):
+                    tc.start_distance_m = cumulative_distances[idx]
+                    found = True
+                    logger.info(f"[地形检测] {tc.change_type}: 起点距离={cumulative_distances[idx]:.1f}m, 上升={tc.elevation_diff}m")
+                    break
+            if not found:
+                logger.warning(f"[地形检测] {tc.change_type} 无法匹配起点: start_point=({tc.start_point.lat}, {tc.start_point.lon})")
 
         # 计算难度评分
         difficulty_score = self._calculate_difficulty_score(
@@ -563,6 +598,7 @@ class TrackParser:
             max_elev_point=max_elev_point,
             min_elev_point=min_elev_point,
             terrain_analysis=terrain_changes,
+            elevation_points=elevation_points,
             difficulty_score=difficulty_score,
             difficulty_level=difficulty_level,
             estimated_duration_hours=estimated_duration,
@@ -658,6 +694,109 @@ class TrackParser:
 
         # 根据难度调整（更难的路线用时更长）
         return total_time * 1.1
+
+    def _generate_elevation_points(
+        self,
+        points: List[Point3D],
+        total_distance_m: float,
+        max_elev_point: Point3D,
+        min_elev_point: Point3D,
+        num_samples: int = 100
+    ) -> List[ElevationPoint]:
+        """
+        从轨迹点中抽样生成海拔轨迹点（用于前端可视化）
+
+        对轨迹点进行等距抽样，确保前端能正确显示海拔变化曲线，
+        并标记关键点（起点、终点、最高点、最低点）。
+
+        Args:
+            points: 原始轨迹点列表
+            total_distance_m: 总距离（米）
+            max_elev_point: 最高海拔点
+            min_elev_point: 最低海拔点
+            num_samples: 抽样点数（默认100个）
+
+        Returns:
+            List[ElevationPoint]: 抽样后的海拔轨迹点列表
+        """
+        if len(points) < 2:
+            return []
+
+        # 计算每个原始点的累计距离
+        cumulative_distances = [0.0]
+        for i in range(len(points) - 1):
+            dist = self._haversine_distance(
+                points[i].lat, points[i].lon,
+                points[i+1].lat, points[i+1].lon
+            )
+            cumulative_distances.append(cumulative_distances[-1] + dist)
+
+        # 计算抽样间隔
+        sample_interval = total_distance_m / (num_samples - 1) if num_samples > 1 else total_distance_m
+
+        # 找出关键点在累计距离中的位置
+        max_elev_distance = 0.0
+        min_elev_distance = 0.0
+        for i, p in enumerate(points):
+            if (abs(p.lat - max_elev_point.lat) < 1e-6 and
+                abs(p.lon - max_elev_point.lon) < 1e-6):
+                max_elev_distance = cumulative_distances[i]
+            if (abs(p.lat - min_elev_point.lat) < 1e-6 and
+                abs(p.lon - min_elev_point.lon) < 1e-6):
+                min_elev_distance = cumulative_distances[i]
+
+        # 生成抽样点
+        elevation_points: List[ElevationPoint] = []
+        for i in range(num_samples):
+            target_distance = i * sample_interval
+
+            # 在原始点中找到最接近目标距离的点
+            # 二分查找
+            left, right = 0, len(cumulative_distances) - 1
+            while left < right - 1:
+                mid = (left + right) // 2
+                if cumulative_distances[mid] <= target_distance:
+                    left = mid
+                else:
+                    right = mid
+
+            # 线性插值获取海拔
+            if left == right or cumulative_distances[right] == cumulative_distances[left]:
+                elevation = points[left].elevation
+            else:
+                # 线性插值
+                ratio = (target_distance - cumulative_distances[left]) / (cumulative_distances[right] - cumulative_distances[left])
+                elevation = points[left].elevation + ratio * (points[right].elevation - points[left].elevation)
+
+            # 判断是否为关键点
+            is_key_point = False
+            label = None
+
+            # 起点
+            if i == 0:
+                is_key_point = True
+                label = '起点'
+            # 终点
+            elif i == num_samples - 1:
+                is_key_point = True
+                label = '终点'
+            # 最高点
+            elif abs(target_distance - max_elev_distance) < sample_interval / 2:
+                is_key_point = True
+                label = '最高点'
+            # 最低点
+            elif abs(target_distance - min_elev_distance) < sample_interval / 2:
+                is_key_point = True
+                label = '最低点'
+
+            elevation_points.append(ElevationPoint(
+                distance_m=round(target_distance, 1),
+                elevation_m=round(elevation, 1),
+                is_key_point=is_key_point,
+                label=label
+            ))
+
+        return elevation_points
 
 
 __all__ = ["TrackParser", "TrackParseError"]

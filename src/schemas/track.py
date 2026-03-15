@@ -13,11 +13,20 @@ from pydantic import BaseModel, Field, model_validator, ConfigDict
 from .base import Point3D
 
 
+class ElevationPoint(BaseModel):
+    """海拔轨迹点（用于前端可视化）"""
+    distance_m: float = Field(..., description="累计距离（米）")
+    elevation_m: float = Field(..., description="海拔（米）")
+    is_key_point: bool = Field(default=False, description="是否为关键点")
+    label: Optional[str] = Field(None, description="关键点标签")
+
+
 class TerrainChange(BaseModel):
     """地形变化段"""
     change_type: Literal["大爬升", "大下降"] = Field(..., description="地形变化类型")
     start_point: Point3D = Field(..., description="路段起点")
     end_point: Point3D = Field(..., description="路段终点")
+    start_distance_m: float = Field(default=0, description="起点累计距离（米）")
     elevation_diff: float = Field(..., description="绝对上升/下降量 (米)", gt=0)
     distance_m: float = Field(..., description="该路段水平距离 (米)", gt=0)
     gradient_percent: float = Field(..., description="坡度 (百分比 %，如 15.5%)", ge=0)
@@ -64,10 +73,10 @@ class TrackAnalysisResult(BaseModel):
     min_elev_point: Point3D = Field(..., description="最低点（用于查询最低气温）")
 
     # 核心业务逻辑：大爬升/大下降路段分析
-    # 业务规则约束：
-    # 大爬升：单次爬升 > 200m 且 中途下降 < 50m
-    # 大下降：单次下降 > 300m 且 中途上升 < 20m
     terrain_analysis: List[TerrainChange] = Field(default_factory=list, description="危险/高强度路段集合")
+
+    # 海拔轨迹数据（用于前端可视化）
+    elevation_points: List[ElevationPoint] = Field(default_factory=list, description="抽样海拔轨迹点")
 
     # 路线评估指标
     difficulty_score: float = Field(..., description="难度评分 (0-100)", ge=0, le=100)
