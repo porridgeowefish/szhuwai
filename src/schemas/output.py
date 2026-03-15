@@ -28,8 +28,12 @@ class PlanningContext(BaseModel):
     raw_request: str = Field(..., description="用户原始请求")
     additional_info: str = Field(default="", description="用户额外要求/补充信息")
 
-    # 精准位置名称（用于搜索和 LLM Context）
+    # 精准位置名称（用于显示，不再用于搜索）
     precise_location_name: str = Field(default="", description="轨迹起点的精准位置名称")
+
+    # 用户输入的线路信息（新增）
+    plan_title: str = Field(default="", description="用户输入的线路名称/计划书标题")
+    key_destinations: List[str] = Field(default_factory=list, description="用户输入的核心目的地列表")
 
     # 原始 API 数据
     track_analysis_raw: TrackAnalysisResult = Field(..., description="完整的轨迹分析结果")
@@ -133,10 +137,18 @@ class SafetyIssue(BaseModel):
 
 class GridPointWeather(BaseModel):
     """关键格点天气（仅保留核心指标）"""
-    point_type: Literal["起点", "终点", "最高点"]
+    point_type: Literal["起点", "终点", "最高点", "中点"]
     temp: int = Field(..., description="温度 (°C)")
     wind_scale: str = Field(..., description="风力等级")
     humidity: int = Field(..., description="相对湿度 (%)")
+
+    @field_validator('wind_scale', mode='before')
+    @classmethod
+    def convert_wind_scale_to_str(cls, v):
+        """将风力等级转换为字符串"""
+        if isinstance(v, int):
+            return str(v)
+        return v
 
 
 class TerrainSegment(BaseModel):

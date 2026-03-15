@@ -79,19 +79,21 @@ async def generate_plan(
     trip_date: str = Form(..., description="出行时间(YYYY-MM-DD)"),
     departure_point: str = Form(..., description="出发地点(供高德解析使用，需尽量详细)"),
     additional_info: str = Form("", description="补充信息"),
-    file: UploadFile = File(..., description="GPX/KML 轨迹文件（必填）")
+    file: UploadFile = File(..., description="GPX/KML 轨迹文件（必填）"),
+    plan_title: str = Form(..., description="线路名称/计划书标题（必填）"),
+    key_destinations: str = Form(..., description="核心目的地，逗号分隔（至少1个，必填）")
 ) -> PlanResponse:
     """
     生成户外活动计划
 
-    接收出行时间、出发地点、补充信息和轨迹文件，调用 Planner 生成完整的户外活动计划。
-
-    轨迹文件是唯一不可替代的数据源，所有查询基于轨迹解析出的经纬度坐标。
+    接收出行时间、出发地点、补充信息、轨迹文件和核心目的地，调用 Planner 生成完整的户外活动计划。
 
     - **trip_date**: 出行时间（YYYY-MM-DD，必填）
     - **departure_point**: 出发地点（供高德解析使用，需尽量详细，必填）
     - **additional_info**: 补充信息（可选）
     - **file**: GPX/KML 轨迹文件（必填）
+    - **plan_title**: 线路名称/计划书标题（必填）
+    - **key_destinations**: 核心目的地，逗号分隔（至少1个，必填）
     """
     temp_file_path = None
     logger.info(f"收到计划生成请求: trip_date={trip_date}, departure_point={departure_point}")
@@ -101,6 +103,27 @@ async def generate_plan(
         raise HTTPException(
             status_code=400,
             detail="trip_date、departure_point 和 file 都是必填项"
+        )
+
+    # 验证新必填字段
+    if not plan_title or not plan_title.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="plan_title（线路名称）是必填项"
+        )
+
+    if not key_destinations or not key_destinations.strip():
+        raise HTTPException(
+            status_code=400,
+            detail="key_destinations（核心目的地）是必填项，至少填写1个"
+        )
+
+    # 解析核心目的地列表
+    destinations_list = [d.strip() for d in key_destinations.split(',') if d.strip()]
+    if len(destinations_list) == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="key_destinations（核心目的地）至少需要1个有效目的地"
         )
 
     try:
@@ -128,7 +151,9 @@ async def generate_plan(
             trip_date=trip_date,
             departure_point=departure_point,
             additional_info=additional_info,
-            gpx_path=str(temp_file_path)
+            gpx_path=str(temp_file_path),
+            plan_title=plan_title,
+            key_destinations=destinations_list
         )
         logger.info(f"计划生成成功: {plan.plan_id}")
 

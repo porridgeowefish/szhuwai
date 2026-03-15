@@ -193,6 +193,33 @@ class WeatherClient(BaseAPIClient):
         return self._make_weather_request("GET", endpoint, params=params)
 
     @handle_api_errors
+    def get_grid_weather_24h(self, lon: float, lat: float, lang: str = "zh") -> HourlyWeatherResponse:
+        """获取格点24小时逐小时天气预报（全天）"""
+        endpoint = "grid-weather/24h"
+        location = f"{lon},{lat}"  # 注意顺序：经度,纬度
+        params = {"location": location, "lang": lang}
+
+        response = self._make_weather_request("GET", endpoint, params=params)
+
+        # 转换为HourlyWeather模型
+        hourly_data = []
+        for hour_data in response.get("hourly", []):
+            hourly = HourlyWeather(
+                fxTime=hour_data["fxTime"],
+                temp=hour_data["temp"],
+                pop=hour_data.get("pop", "0"),
+                precip=hour_data.get("precip", "0"),
+                windScale=hour_data.get("windScale", "0")
+            )
+            hourly_data.append(hourly)
+
+        return HourlyWeatherResponse(
+            location=location,
+            updateTime=response.get("updateTime", ""),
+            hourly=hourly_data
+        )
+
+    @handle_api_errors
     def get_cloud_sea(self, location: str, lang: str = "zh") -> WeatherCloudSeaAnalysis:
         """获取云海指数"""
         endpoint = "cloudSea"

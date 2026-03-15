@@ -18,13 +18,6 @@ from src.schemas.base import Point3D
 from src.schemas.output import (
     OutdoorActivityPlan,
     PlanningContext,
-    SafetyAssessment,
-    EmergencyRescueContact,
-    ScenicSpot,
-    EquipmentItem,
-    ItineraryItem,
-    GridPointWeather,
-    EquipmentCategory,
     TrackDetailAnalysis,
     TerrainSegment
 )
@@ -57,7 +50,8 @@ class OutdoorPlannerRouter:
         self.key_points: Dict[str, Point3D] = {}
 
     def execute_planning(self, trip_date: str, departure_point: str,
-                         additional_info: str, gpx_path: str) -> OutdoorActivityPlan:
+                         additional_info: str, gpx_path: str,
+                         plan_title: str = "", key_destinations: List[str] = None) -> OutdoorActivityPlan:
         """
         执行户外活动规划主流程
 
@@ -66,6 +60,8 @@ class OutdoorPlannerRouter:
             departure_point: 出发地点（供高德解析使用）
             additional_info: 补充信息
             gpx_path: GPX/KML 轨迹文件路径（必填）
+            plan_title: 线路名称/计划书标题（作为计划书名称）
+            key_destinations: 核心目的地列表（用于搜索关键词）
 
         Returns:
             OutdoorActivityPlan: 最终的户外活动计划
@@ -73,6 +69,9 @@ class OutdoorPlannerRouter:
         Raises:
             ValueError: 如果轨迹解析失败
         """
+        # 默认值处理
+        if key_destinations is None:
+            key_destinations = []
         # 步骤 1: 强制解析轨迹（轨迹是唯一数据源）
         track_analysis = self._parse_track(gpx_path)
         if not track_analysis:
@@ -95,10 +94,12 @@ class OutdoorPlannerRouter:
             trip_date=trip_date,
             departure_point=departure_point,
             destination_coord=destination_coord,
-            additional_info=additional_info
+            additional_info=additional_info,
+            plan_title=plan_title,
+            key_destinations=key_destinations
         )
 
-        # 步骤 5: 上下文组装
+        # 步骤 5: 上下文组装（使用用户输入的线路名称作为计划书标题）
         user_request = f"计划在{trip_date}从{departure_point}出发进行户外活动。{additional_info}"
         context = self._assemble_context(
             user_request=user_request,
@@ -108,7 +109,9 @@ class OutdoorPlannerRouter:
             search_data=search_data,
             additional_info=additional_info,
             precise_location_name=precise_location_name,
-            around_rescue_data=around_rescue_data
+            around_rescue_data=around_rescue_data,
+            plan_title=plan_title,  # 传递线路名称
+            key_destinations=key_destinations  # 传递核心目的地
         )
 
         # 步骤 6: LLM 提炼与实例化
@@ -184,7 +187,8 @@ class OutdoorPlannerRouter:
 
     def _gather_data_concurrently(self, track_analysis: TrackAnalysisResult,
                                   trip_date: str, departure_point: str,
-                                  destination_coord: str, additional_info: str) -> Tuple[Optional[WeatherSummary], Optional[TransportRoutes], List[WebSearchResponse], str, List[Dict]]:
+                                  destination_coord: str, additional_info: str,
+                                  plan_title: str = "", key_destinations: List[str] = None) -> Tuple[Optional[WeatherSummary], Optional[TransportRoutes], List[WebSearchResponse], str, List[Dict]]:
         """
         步骤 4: 使用线程池并发调用 API 客户端获取数据
 
@@ -196,16 +200,22 @@ class OutdoorPlannerRouter:
             departure_point: 出发地点（用于地理编码）
             destination_coord: 目的地坐标（轨迹起点坐标）
             additional_info: 补充信息
+            plan_title: 线路名称/计划书标题
+            key_destinations: 核心目的地列表（用于搜索关键词）
 
         Returns:
             Tuple: (天气数据, 交通数据, 搜索数据, 精准位置名称, 周边救援数据)
         """
         logger.info("开始并发获取数据（基于轨迹坐标）")
 
+        # 默认值处理
+        if key_destinations is None:
+            key_destinations = []
+
         # 获取关键坐标用于天气查询（WGS84坐标系）
         weather_location = f"{track_analysis.start_point.lat},{track_analysis.start_point.lon}"
 
-        # 步骤 1: 先获取逆地理编码，获取轨迹位置的精准地名
+        # 步骤 1: 获取逆地理编码，仅用于周边救援数据查询（不再用于搜索关键词）
         precise_location_name = ""
         regeo_result = None
         try:
@@ -219,11 +229,7 @@ class OutdoorPlannerRouter:
 
             regeo_result = self.map_client.reverse_geocode(f"{gcj_lon},{gcj_lat}")
 
-            # 按优先级提取精准位置名称
-            # 优先1：50米内有POI，取最近的POI名称
-            # 优先2：有道路信息，取道路名称
-            # 优先3：乡镇+社区
-            # 兜底：坐标格式化
+            # 按优先级提取精准位置名称（仅用于显示，不再用于搜索）
             precise_location_name = regeo_result.get_precise_location_name()
 
             logger.info(f"轨迹位置精准地名: {precise_location_name}")
@@ -234,31 +240,111 @@ class OutdoorPlannerRouter:
             # 兜底：使用轨迹文件名或默认
             precise_location_name = track_analysis.track_name or "户外徒步"
 
-        # 步骤 2: 构建搜索查询（基于精准位置名称）
-        # 最终使用的地名
-        search_location = precise_location_name or track_analysis.track_name or "户外徒步"
+        # 步骤 2: 构建搜索查询（基于用户输入的核心目的地，而非逆地理编码）
+        # 使用核心目的地作为搜索关键词
+        search_keywords = " ".join(key_destinations) if key_destinations else (plan_title or "户外徒步")
+        logger.info(f"搜索关键词（基于用户输入）: {search_keywords}")
+
         search_queries = []
 
-        # 1. 周边景区搜索
-        search_queries.append(f"{search_location} 景点 景区 旅游")
+        # 1. 周边景区搜索（使用核心目的地）
+        search_queries.append(f"{search_keywords} 景点 景区 旅游")
 
-        # 2. 附近救援队搜索（轨迹位置附近的救援力量）- 使用精准位置名称
-        search_queries.append(f"{search_location} 户外徒步 应急救援队 报警电话")
+        # 2. 附近救援队搜索（使用核心目的地）
+        search_queries.append(f"{search_keywords} 户外徒步 应急救援队 报警电话")
 
-        # 3. 徒步攻略搜索
-        search_queries.append(f"{search_location} 徒步攻略 登山路线 注意事项")
+        # 3. 徒步攻略搜索（使用核心目的地）
+        search_queries.append(f"{search_keywords} 徒步攻略 登山路线 注意事项")
 
-        # 4. 装备推荐搜索
-        search_queries.append(f"{search_location} 徒步装备 登山装备 露营装备推荐")
+        # 4. 装备推荐搜索（使用核心目的地）
+        search_queries.append(f"{search_keywords} 徒步装备 登山装备 露营装备推荐")
 
         # 定义获取函数
         def fetch_weather():
-            """获取轨迹起点和最高点的格点天气数据"""
+            """获取轨迹多点的格点天气数据和全天24小时逐小时预报"""
             try:
                 start = track_analysis.start_point
                 # 使用格点天气API - 参数是 (lon, lat) 顺序
                 logger.info(f"获取格点天气: lon={start.lon}, lat={start.lat}, 日期={trip_date}")
+
+                # 获取3天格点天气预报（主要数据源）
                 grid_weather = self.weather_client.get_grid_weather_3d(start.lon, start.lat)
+
+                # 获取全天24小时逐小时天气预报（格点API）
+                hourly_weather = None
+                try:
+                    hourly_weather = self.weather_client.get_grid_weather_24h(start.lon, start.lat)
+                    logger.info(f"获取到24小时逐小时天气数据，共{len(hourly_weather.hourly)}小时")
+                except Exception as e:
+                    logger.warning(f"获取24小时逐小时天气失败: {e}")
+
+                # 获取多抽样点的格点天气（起点、中点、最高点、终点）
+                grid_point_weather_list = []
+
+                # 1. 起点
+                try:
+                    start_now = self.weather_client.get_grid_weather_now(start.lon, start.lat)
+                    if start_now and "now" in start_now:
+                        now = start_now["now"]
+                        grid_point_weather_list.append({
+                            "point_type": "起点",
+                            "temp": int(float(now.get("temp", 0))),
+                            "wind_scale": now.get("windScale", "0"),
+                            "humidity": int(float(now.get("humidity", 0)))
+                        })
+                except Exception as e:
+                    logger.warning(f"获取起点实时天气失败: {e}")
+
+                # 2. 最高点
+                if track_analysis.max_elev_point:
+                    try:
+                        highest = track_analysis.max_elev_point
+                        highest_now = self.weather_client.get_grid_weather_now(highest.lon, highest.lat)
+                        if highest_now and "now" in highest_now:
+                            now = highest_now["now"]
+                            grid_point_weather_list.append({
+                                "point_type": "最高点",
+                                "temp": int(float(now.get("temp", 0))),
+                                "wind_scale": now.get("windScale", "0"),
+                                "humidity": int(float(now.get("humidity", 0)))
+                            })
+                    except Exception as e:
+                        logger.warning(f"获取最高点实时天气失败: {e}")
+
+                # 3. 终点
+                if track_analysis.end_point:
+                    try:
+                        end = track_analysis.end_point
+                        end_now = self.weather_client.get_grid_weather_now(end.lon, end.lat)
+                        if end_now and "now" in end_now:
+                            now = end_now["now"]
+                            grid_point_weather_list.append({
+                                "point_type": "终点",
+                                "temp": int(float(now.get("temp", 0))),
+                                "wind_scale": now.get("windScale", "0"),
+                                "humidity": int(float(now.get("humidity", 0)))
+                            })
+                    except Exception as e:
+                        logger.warning(f"获取终点实时天气失败: {e}")
+
+                # 4. 中点（如果轨迹点足够多）
+                if hasattr(track_analysis, 'track_points') and track_analysis.track_points and len(track_analysis.track_points) > 10:
+                    try:
+                        mid_idx = len(track_analysis.track_points) // 2
+                        mid_point = track_analysis.track_points[mid_idx]
+                        mid_now = self.weather_client.get_grid_weather_now(mid_point.lon, mid_point.lat)
+                        if mid_now and "now" in mid_now:
+                            now = mid_now["now"]
+                            grid_point_weather_list.append({
+                                "point_type": "中点",
+                                "temp": int(float(now.get("temp", 0))),
+                                "wind_scale": now.get("windScale", "0"),
+                                "humidity": int(float(now.get("humidity", 0)))
+                            })
+                    except Exception as e:
+                        logger.warning(f"获取中点实时天气失败: {e}")
+
+                logger.info(f"获取到{len(grid_point_weather_list)}个抽样点的天气数据")
 
                 # 将 GridWeatherResponse 转换为 CityWeatherResponse 格式
                 from src.schemas.weather import WeatherSummary, CityWeatherResponse, CityWeatherDaily
@@ -298,6 +384,13 @@ class OutdoorPlannerRouter:
                     if temps:
                         summary.max_temp = max(temps)
                         summary.min_temp = min(temps)
+
+                # 附加全天24小时逐小时天气数据（存储在summary中）
+                if hourly_weather:
+                    summary.hourly_24h = hourly_weather
+
+                # 附加多抽样点天气数据
+                summary.grid_points = grid_point_weather_list
 
                 return summary
             except Exception as e:
@@ -485,7 +578,9 @@ class OutdoorPlannerRouter:
                          search_data: List[WebSearchResponse],
                          additional_info: str = "",
                          precise_location_name: str = "",
-                         around_rescue_data: List[Dict] = None) -> PlanningContext:
+                         around_rescue_data: List[Dict] = None,
+                         plan_title: str = "",
+                         key_destinations: List[str] = None) -> PlanningContext:
         """
         步骤 4: 上下文组装
         """
@@ -500,6 +595,8 @@ class OutdoorPlannerRouter:
             raw_request=user_request,
             additional_info=additional_info,
             precise_location_name=precise_location_name,
+            plan_title=plan_title,  # 新增：线路名称
+            key_destinations=key_destinations or [],  # 新增：核心目的地列表
             track_analysis_raw=track_analysis or self._create_empty_track(),
             weather_raw=weather_data or self._create_empty_weather(),
             transport_raw=transport_data or self._create_empty_transport(),
@@ -591,9 +688,9 @@ class OutdoorPlannerRouter:
         }
 
         # 构建请求体
-        # 使用 Qwen/Qwen2.5-7B-Instruct 模型（性价比较高）
+        # 使用Pro/moonshotai/Kimi-K2.5 使用K2.5，最新模型
         payload = {
-            "model": "Qwen/Qwen2.5-7B-Instruct",
+            "model": "Pro/moonshotai/Kimi-K2.5",
             "messages": [
                 {
                     "role": "system",
@@ -625,7 +722,7 @@ class OutdoorPlannerRouter:
    - 医疗、救援、报警
 
 8. **⚠️ 零幻觉原则**：请基于提供的真实轨迹指标（里程、爬升、海拔）进行风险评估。如果数据缺失，请报告数据不足，严禁编造轨迹指标或虚构数据。
-
+以下是一个样例json文件，请你作为生成参考。
 ```json
 {
     "plan_id": "计划ID",
@@ -651,7 +748,7 @@ class OutdoorPlannerRouter:
         {"fxTime": "YYYY-MM-DDTHH:MM:SS", "temp": 18, "pop": 0, "precip": 0, "windScale": "2"}
     ],
     "critical_grid_weather": [
-        {"point_type": "起点|终点|最高点", "temp": 18, "wind_scale": "2", "humidity": 65}
+        {"point_type": "起点|终点|最高点|中点", "temp": 18, "wind_scale": "2", "humidity": 65}
     ],
     "itinerary": [
         {"time": "08:00", "activity": "活动内容", "location": "地点", "duration_minutes": 30, "notes": "备注"}
@@ -716,6 +813,10 @@ class OutdoorPlannerRouter:
         # 添加必要字段
         plan_data["plan_id"] = plan_id
         plan_data["created_at"] = datetime.now()
+
+        # 使用用户输入的线路名称作为计划书标题（覆盖LLM生成的名称）
+        if context.plan_title and context.plan_title.strip():
+            plan_data["plan_name"] = context.plan_title.strip()
 
         # 确保 overview 字段使用我们生成的版本
         plan_data["track_overview"] = track_overview
@@ -952,6 +1053,25 @@ class OutdoorPlannerRouter:
         else:
             around_rescue_section = "\n## 🏥 高德地图周边救援数据\n无（10km范围内未搜索到医院/派出所，请使用 Web 搜索结果或通用报警电话）\n"
 
+        # 构建全天24小时逐小时天气数据部分
+        hourly_24h_section = ""
+        if context.weather_raw and context.weather_raw.hourly_24h and context.weather_raw.hourly_24h.hourly:
+            hourly_24h_section = "\n## 🕐 全天24小时逐小时天气预报（格点API，不基于活动时间）\n"
+            hourly_24h_section += "**重要**：请在 hourly_weather 字段中输出全天24小时的逐小时天气数据，不需要根据活动时间过滤。\n\n"
+            hourly_24h_section += "### 格点逐小时预报数据\n"
+            for hour in context.weather_raw.hourly_24h.hourly:
+                time_str = hour.fxTime.split('T')[1][:5] if 'T' in hour.fxTime else hour.fxTime
+                hourly_24h_section += f"- {time_str}: 温度{hour.temp}°C, 降水概率{hour.pop}%, 降水量{hour.precip}mm, 风力{hour.windScale}级\n"
+
+        # 构建多抽样点格点天气数据部分
+        grid_points_section = ""
+        if context.weather_raw and context.weather_raw.grid_points:
+            grid_points_section = "\n## 📍 多抽样点格点天气数据（格点API）\n"
+            grid_points_section += "**重要**：请在 critical_grid_weather 字段中包含以下所有抽样点的天气数据。\n\n"
+            grid_points_section += "### 各点位实时天气\n"
+            for point in context.weather_raw.grid_points:
+                grid_points_section += f"- **{point['point_type']}**: 温度{point['temp']}°C, 风力{point['wind_scale']}级, 湿度{point['humidity']}%\n"
+
         prompt = f"""
 请根据以下户外活动规划信息，生成一个详细的户外活动计划：
 
@@ -965,6 +1085,8 @@ class OutdoorPlannerRouter:
 - 难度：{context.track_analysis_raw.difficulty_level}
 - 天气条件：{context.weather_raw.summary.conditions if context.weather_raw and context.weather_raw.summary else '未知'}
 - 交通路线：{context.transport_raw.summary.total_distance if context.transport_raw and context.transport_raw.summary else '未知'}
+{hourly_24h_section}
+{grid_points_section}
 {search_section}
 {around_rescue_section}
 请按照 OutdoorActivityPlan 的结构化输出格式，生成一个完整的户外活动计划，包括：

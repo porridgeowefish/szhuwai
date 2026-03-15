@@ -154,6 +154,12 @@ class WeatherSummary(BaseModel):
     uv_analysis: Optional[str] = None
     precip_analysis: Optional[str] = None
 
+    # 新增：全天24小时逐小时天气（格点API，不基于活动时间）
+    hourly_24h: Optional[HourlyWeatherResponse] = Field(None, description="全天24小时逐小时天气预报")
+
+    # 新增：多抽样点格点天气数据
+    grid_points: List[Dict[str, Any]] = Field(default_factory=list, description="多抽样点格点天气数据")
+
     @field_validator('trip_date')
     @classmethod
     def validate_trip_date(cls, v: str) -> str:

@@ -53,9 +53,9 @@ class TrackAnalysisResult(BaseModel):
     total_distance_km: float = Field(..., description="总里程 (公里)", gt=0)
     total_ascent_m: float = Field(..., description="总累计爬升 (米)", ge=0)
     total_descent_m: float = Field(..., description="总累计下降 (米)", ge=0)
-    max_elevation_m: float = Field(..., description="最高海拔 (米)", gt=0)
-    min_elevation_m: float = Field(..., description="最低海拔 (米)", gt=0)
-    avg_elevation_m: float = Field(..., description="平均海拔 (米)", gt=0)
+    max_elevation_m: float = Field(..., description="最高海拔 (米)")
+    min_elevation_m: float = Field(..., description="最低海拔 (米)")
+    avg_elevation_m: float = Field(..., description="平均海拔 (米)")
 
     # 关键坐标点（用于后续调用天气和交通API）
     start_point: Point3D = Field(..., description="起步点")
