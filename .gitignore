@@ -61,3 +61,8 @@ errors.log
 *.db
 *.sqlite
 sample_plan.json
+
+# CI/CD 配置（敏感）
+ci-config.yaml
+deploy-config.yaml
+deploy.sh
