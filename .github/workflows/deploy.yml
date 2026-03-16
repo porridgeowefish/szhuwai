@@ -66,7 +66,8 @@ jobs:
           host: ${{ secrets.SERVER_HOST }}
           port: ${{ secrets.SERVER_PORT }}
           username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          password: ${{ secrets.SERVER_PASSWORD }}
+          debug: true
           script: |
             echo "登录阿里云容器仓库..."
             echo "${{ secrets.ALIYUN_CR_PASSWORD }}" | docker login ${{ env.REGISTRY }} --username=${{ secrets.ALIYUN_CR_USERNAME }} --password-stdin
