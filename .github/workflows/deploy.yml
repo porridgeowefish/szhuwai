@@ -59,55 +59,36 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. 安装 SSH 客户端
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.8.0
-        with:
-          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-
-      # 3. 部署到服务器
+      # 2. 部署到服务器
       - name: Deploy to server
-        env:
-          SERVER_HOST: ${{ secrets.SERVER_HOST }}
-          SERVER_PORT: ${{ secrets.SERVER_PORT }}
-          SERVER_USER: ${{ secrets.SERVER_USER }}
-          REGISTRY: ${{ env.REGISTRY }}
-          NAMESPACE: ${{ env.NAMESPACE }}
-          IMAGE_NAME: ${{ env.IMAGE_NAME }}
-          IMAGE_TAG: ${{ github.sha }}
-          CONTAINER_NAME: szhuwai
-          APP_PORT: 8000
-
-        run: |
-          echo "=== 部署到服务器 ==="
-
-          # 部署脚本
-          ssh -o StrictHostKeyChecking=no $SERVER_USER@$SERVER_HOST << 'EOF'
-
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          port: ${{ secrets.SERVER_PORT }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
             echo "登录阿里云容器仓库..."
-            echo "${{ secrets.ALIYUN_CR_PASSWORD }}" | docker login $REGISTRY --username=${{ secrets.ALIYUN_CR_USERNAME }} --password-stdin
+            echo "${{ secrets.ALIYUN_CR_PASSWORD }}" | docker login ${{ env.REGISTRY }} --username=${{ secrets.ALIYUN_CR_USERNAME }} --password-stdin
 
             echo "停止并删除旧容器（如存在）..."
-            docker stop $CONTAINER_NAME 2>/dev/null || true
-            docker rm $CONTAINER_NAME 2>/dev/null || true
+            docker stop szhuwai 2>/dev/null || true
+            docker rm szhuwai 2>/dev/null || true
 
             echo "拉取新镜像..."
-            docker pull $REGISTRY/$NAMESPACE/$IMAGE_NAME:$IMAGE_TAG
+            docker pull ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
             echo "启动新容器..."
             docker run -d \
-              --name $CONTAINER_NAME \
+              --name szhuwai \
               --restart unless-stopped \
-              -p $APP_PORT:8000 \
+              -p 8000:8000 \
               -e LOG_LEVEL=INFO \
               -e PYTHONUNBUFFERED=1 \
-              $REGISTRY/$NAMESPACE/$IMAGE_NAME:$IMAGE_TAG
+              ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
             echo "清理旧镜像..."
             docker image prune -f
 
             echo "容器状态:"
-            docker ps | grep $CONTAINER_NAME
-
-            echo "=== 部署完成 ==="
-          EOF
+            docker ps | grep szhuwai
