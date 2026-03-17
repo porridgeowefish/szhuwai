@@ -85,16 +85,18 @@ jobs:
             echo "登录阿里云容器仓库..."
             echo "${{ secrets.ALIYUN_CR_PASSWORD }}" | docker login ${{ env.REGISTRY }} --username=${{ secrets.ALIYUN_CR_USERNAME }} --password-stdin
 
-            echo "停止并删除旧后端容器（如存在）..."
-            docker stop szhuwai-backend 2>/dev/null || true
-            docker rm szhuwai-backend 2>/dev/null || true
+            echo "停止并删除旧容器（如存在）..."
+            docker stop szhuwai 2>/dev/null || true
+            docker rm szhuwai 2>/dev/null || true
+            docker stop nginx 2>/dev/null || true
+            docker rm nginx 2>/dev/null || true
 
             echo "拉取新镜像..."
             docker pull ${{ env.REGISTRY }}/${{ env.NAMESPACE }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
 
             echo "启动后端容器..."
             docker run -d \
-              --name szhuwai-backend \
+              --name szhuwai \
               --restart unless-stopped \
               -p 8000:8000 \
               -e LOG_LEVEL=INFO \
@@ -109,15 +111,7 @@ jobs:
               sudo rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
               sudo nginx -t && sudo nginx -s reload
             else
-              echo "Nginx 未安装，启动 Nginx 容器..."
-              docker stop szhuwai-nginx 2>/dev/null || true
-              docker rm szhuwai-nginx 2>/dev/null || true
-              docker run -d \
-                --name szhuwai-nginx \
-                --restart unless-stopped \
-                -p 80:80 \
-                -v /home/${{ secrets.SERVER_USER }}/nginx.conf:/etc/nginx/nginx.conf:ro \
-                nginx:alpine
+              echo "Nginx 未安装，跳过 Nginx 配置（使用已有代理）"
             fi
 
             echo "清理旧镜像..."
