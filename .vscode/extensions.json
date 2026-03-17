@@ -1,0 +1,29 @@
+{
+  // Recommended Extensions for Outdoor Agent Planner
+
+  "recommendations": [
+    // Python
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+
+    // Testing
+    "littlefoxteam.vscode-python-test-adapter",
+
+    // Code Quality
+    "charliermarsh.ruff",
+    "ms-python.mypy-type-checker",
+
+    // Git
+    "eamodio.gitlens",
+
+    // Utilities
+    "streetsidesoftware.code-spell-checker",
+    "usernamehw.errorlens",
+
+    // Markdown
+    "yzhang.markdown-all-in-one",
+
+    // YAML
+    "redhat.vscode-yaml"
+  ]
+}

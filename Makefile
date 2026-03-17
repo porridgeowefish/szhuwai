@@ -2,77 +2,119 @@
 # Provides convenient commands for development, testing, and building
 
 .PHONY: help test test-all test-schemas test-api test-integration test-fast \
-        lint format type-check clean install \
-        run-coverage coverage-html install-deps check-all
+        lint format type-check clean install check-all \
+        frontend-dev frontend-build frontend-lint \
+        docker-up docker-down docker-build
 
 # Default target
 help:
 	@echo "Outdoor Agent Planner - Available Commands:"
 	@echo ""
-	@echo "Testing:"
-	@echo "  make test          - Run all tests"
-	@echo "  make test-all      - Alias for test"
+	@echo "Backend (Python/FastAPI):"
+	@echo "  make test          - Run all backend tests"
 	@echo "  make test-schemas  - Run schema tests only"
 	@echo "  make test-api      - Run API tests only"
-	@echo "  make test-integration - Run integration tests only"
-	@echo "  make test-fast     - Run fast tests (skip slow)"
-	@echo ""
-	@echo "Code Quality:"
 	@echo "  make lint          - Run linter (ruff check)"
 	@echo "  make format        - Format code (ruff format)"
 	@echo "  make type-check    - Run type checker (mypy)"
 	@echo "  make check-all     - Run all quality checks"
 	@echo ""
-	@echo "Coverage:"
-	@echo "  make run-coverage  - Run tests with coverage"
-	@echo "  make coverage-html - Generate HTML coverage report"
+	@echo "Frontend (React/TypeScript):"
+	@echo "  make frontend-dev     - Start frontend dev server"
+	@echo "  make frontend-build   - Build frontend for production"
+	@echo "  make frontend-lint    - Run frontend linter"
+	@echo ""
+	@echo "Docker:"
+	@echo "  make docker-up     - Start all services with docker-compose"
+	@echo "  make docker-down   - Stop all services"
+	@echo "  make docker-build  - Rebuild all Docker images"
 	@echo ""
 	@echo "Development:"
-	@echo "  make install       - Install dependencies"
-	@echo "  make clean        - Clean cache and build artifacts"
+	@echo "  make install       - Install backend dependencies"
+	@echo "  make clean         - Clean cache and build artifacts"
 	@echo ""
+
+# ============================================
+# Backend Commands
+# ============================================
 
 # Testing commands
 test test-all:
-	pytest test/ -v
+	cd backend && pytest test/ -v
 
 test-schemas:
-	pytest test/schemas/ -v
+	cd backend && pytest test/schemas/ -v
 
 test-api:
-	pytest test/api/ -v
+	cd backend && pytest test/api/ -v
 
 test-integration:
-	pytest test/integration/ -v -m integration
+	cd backend && pytest test/integration/ -v -m integration
 
 test-fast:
-	pytest test/ -v -m "not slow"
+	cd backend && pytest test/ -v -m "not slow"
 
 # Code quality commands
 lint:
-	ruff check .
+	cd backend && ruff check .
 
 format:
-	ruff format .
+	cd backend && ruff format .
 
 type-check:
-	mypy schemas/ api/ --strict
+	cd backend && mypy src/ --strict
 
 check-all: lint format type-check
 	@echo ""
-	@echo "All checks passed!"
+	@echo "All backend checks passed!"
 
 # Coverage commands
 run-coverage:
-	pytest test/ --cov=schemas --cov=api --cov-report=term --cov-report=html
+	cd backend && pytest test/ --cov=src --cov-report=term --cov-report=html
 
 coverage-html: run-coverage
 	@echo ""
-	@echo "Coverage report generated in htmlcov/index.html"
+	@echo "Coverage report generated in backend/htmlcov/index.html"
 
 # Development commands
 install:
-	pip install -r requirements.txt
+	cd backend && pip install -r requirements.txt
+
+# ============================================
+# Frontend Commands
+# ============================================
+
+frontend-dev:
+	cd frontend && npm run dev
+
+frontend-build:
+	cd frontend && npm run build
+
+frontend-lint:
+	cd frontend && npm run lint
+
+frontend-install:
+	cd frontend && npm install
+
+# ============================================
+# Docker Commands
+# ============================================
+
+docker-up:
+	docker-compose up -d
+
+docker-down:
+	docker-compose down
+
+docker-build:
+	docker-compose build --no-cache
+
+docker-logs:
+	docker-compose logs -f
+
+# ============================================
+# Clean Commands
+# ============================================
 
 clean:
 	@echo "Cleaning cache and build artifacts..."
@@ -81,6 +123,8 @@ clean:
 	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "node_modules" -exec rm -rf {} + 2>/dev/null || true
+	find . -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
 	find . -type f -name ".coverage" -delete 2>/dev/null || true
 	find . -type f -name "*.pyc" -delete 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true

@@ -1,0 +1,112 @@
+{
+  // VS Code Launch Configuration for Testing
+  // Provides debug configurations for running tests
+
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python: Run All Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "test/",
+        "-v"
+      ]
+    },
+    {
+      "name": "Python: Run Schema Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "test/schemas/",
+        "-v"
+      ]
+    },
+    {
+      "name": "Python: Run API Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "test/api/",
+        "-v"
+      ]
+    },
+    {
+      "name": "Python: Run Integration Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "test/integration/",
+        "-v",
+        "-m",
+        "integration"
+      ]
+    },
+    {
+      "name": "Python: Run Current Test File",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "${file}",
+        "-v"
+      ]
+    },
+    {
+      "name": "Python: Test with Coverage",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "test/",
+        "--cov=schemas",
+        "--cov=api",
+        "--cov-report=html",
+        "--cov-report=term"
+      ]
+    },
+    {
+      "name": "Python: Run Specific Test",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "justMyCode": false,
+      "cwd": "${workspaceFolder}",
+      "console": "integratedTerminal",
+      "args": [
+        "-k",
+        "${input:testName}"
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "testName",
+      "description": "Enter test name pattern (e.g., test_point, TestPoint3D)",
+      "default": "",
+      "type": "promptString"
+    }
+  ]
+}

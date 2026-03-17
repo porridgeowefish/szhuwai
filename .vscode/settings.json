@@ -1,0 +1,93 @@
+{
+  // VS Code Settings for Outdoor Agent Planner
+
+  // Python configuration
+  "python.defaultInterpreterPath": "C:\\Users\\xmz14_ugn3mh4\\anaconda3\\envs\\real_base\\python.exe",
+  "python.linting.enabled": true,
+  "python.linting.pylintEnabled": false,
+  "python.linting.ruffEnabled": true,
+  "python.formatting.provider": "ruff",
+  "python.analysis.typeCheckingMode": "strict",
+  "python.testing.pytestEnabled": true,
+  "python.testing.pytestArgs": [
+    "backend/test/",
+    "-v"
+  ],
+  "python.testing.unittestEnabled": false,
+
+  // TypeScript/JavaScript configuration
+  "typescript.tsdk": "frontend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "javascript.suggest.paths": true,
+  "typescript.suggest.paths": true,
+
+  // Editor settings
+  "editor.formatOnSave": true,
+  "editor.codeActionsOnSave": {
+    "source.fixAll.ruff": "explicit",
+    "source.fixAll.eslint": "explicit"
+  },
+  "editor.rulers": [88, 100],
+  "editor.tabSize": 4,
+  "editor.insertSpaces": true,
+
+  // File settings
+  "files.encoding": "utf8",
+  "files.eol": "\n",
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/*.pyc": true,
+    ".pytest_cache": true,
+    ".mypy_cache": true,
+    ".ruff_cache": true,
+    "**/htmlcov": true,
+    ".coverage": true,
+    "**/*.egg-info": true,
+    "**/node_modules": true
+  },
+
+  // Test configuration
+  "testing.automaticallyOpenPeekView": "failureInVisibleDocument",
+  "testing.showCoverageBadge": true,
+
+  // Extensions recommendations
+  "extensions.ignoreRecommendations": false,
+
+  // Language specific
+  "[python]": {
+    "editor.defaultFormatter": "ms-python.ruff",
+    "editor.rulers": [88],
+    "editor.formatOnSave": true
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.tabSize": 2
+  },
+  "[markdown]": {
+    "editor.wordWrap": "on",
+    "editor.quickSuggestions": {
+      "comments": "off",
+      "strings": "off",
+      "other": "off"
+    }
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  }
+}
