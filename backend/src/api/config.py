@@ -43,10 +43,7 @@ class APIConfig(BaseModel):
 
     # 代理配置
     PROXY: Dict[str, str] = Field(
-        default={
-            "http": "http://127.0.0.1:7890",
-            "https": "http://127.0.0.1:7890"
-        },
+        default={},
         description="代理服务器配置"
     )
 
@@ -120,7 +117,8 @@ class APIConfig(BaseModel):
             "QWEATHER_API_KEY": "WEATHER_API_KEY",
             "AMAP_API_KEY": "MAP_API_KEY",
             "LLM_API_KEY": "LLM_API_KEY",
-            "TAVILY_API_KEY": "SEARCH_API_KEY"
+            "TAVILY_API_KEY": "SEARCH_API_KEY",
+            "WEATHER_DEVELOPER_HOST": "WEATHER_DEVELOPER_HOST"
         }
 
         for env_var, config_key in env_mapping.items():

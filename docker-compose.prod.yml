@@ -1,0 +1,25 @@
+services:
+  backend:
+    image: ${REGISTRY}/${NAMESPACE}/${BACKEND_IMAGE}:${IMAGE_TAG}
+    container_name: szhuwai-backend
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./temp_tracks:/app/temp_tracks
+    networks:
+      - szhuwai-network
+
+  frontend:
+    image: ${REGISTRY}/${NAMESPACE}/${FRONTEND_IMAGE}:${IMAGE_TAG}
+    container_name: szhuwai-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "80:80"
+    networks:
+      - szhuwai-network
+
+networks:
+  szhuwai-network:
+    driver: bridge

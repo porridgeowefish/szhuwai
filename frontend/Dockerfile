@@ -3,11 +3,14 @@ FROM node:20-alpine AS builder
 
 WORKDIR /app
 
+# 使用国内 npm 镜像
+RUN npm config set registry https://registry.npmmirror.com
+
 # 复制依赖文件
-COPY package.json package-lock.json* ./
+COPY package.json ./
 
 # 安装依赖
-RUN npm ci --legacy-peer-deps
+RUN npm install --legacy-peer-deps
 
 # 复制源代码
 COPY . .
