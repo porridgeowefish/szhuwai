@@ -73,6 +73,28 @@ class APIConfig(BaseModel):
         description="大模型API基础URL"
     )
 
+    # LLM 配置
+    LLM_MODEL: str = Field(
+        default="Pro/moonshotai/Kimi-K2.5",
+        description="大模型名称"
+    )
+    LLM_TEMPERATURE: float = Field(
+        default=0.7,
+        ge=0.0,
+        le=2.0,
+        description="LLM 温度参数"
+    )
+    LLM_MAX_TOKENS: int = Field(
+        default=8192,
+        ge=1,
+        description="LLM 最大输出 token 数"
+    )
+    LLM_TIMEOUT: int = Field(
+        default=600,
+        ge=10,
+        description="LLM API 超时时间（秒）"
+    )
+
     @field_validator('TIMEOUT', 'RETRY', 'RATE_LIMIT', 'CACHE_TTL', 'CACHE_MAX_SIZE')
     @classmethod
     def validate_positive_numbers(cls, v: int) -> int:

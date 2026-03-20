@@ -61,6 +61,9 @@ class APICache:
         self.ttl = ttl
         self.cache = {}
         self.access_times = {}
+        # 统计数据
+        self._hits = 0
+        self._misses = 0
 
     def get(self, key: str) -> Optional[Dict]:
         """获取缓存数据"""
@@ -69,11 +72,13 @@ class APICache:
             if (datetime.now() - self.access_times[key]).total_seconds() < self.ttl:
                 # 更新访问时间
                 self.access_times[key] = datetime.now()
+                self._hits += 1
                 return self.cache[key]
             else:
                 # 删除过期缓存
                 del self.cache[key]
                 del self.access_times[key]
+        self._misses += 1
         return None
 
     def set(self, key: str, data: Dict) -> None:
@@ -92,14 +97,20 @@ class APICache:
         """清空缓存"""
         self.cache.clear()
         self.access_times.clear()
+        self._hits = 0
+        self._misses = 0
 
     def get_stats(self) -> Dict:
         """获取缓存统计"""
+        total_requests = self._hits + self._misses
+        hit_rate = (self._hits / total_requests * 100) if total_requests > 0 else 0
         return {
             "size": len(self.cache),
             "max_size": self.max_size,
             "ttl": self.ttl,
-            "hit_rate": self.cache.get("hit_rate", 0)
+            "hits": self._hits,
+            "misses": self._misses,
+            "hit_rate": round(hit_rate, 2)
         }
 
 

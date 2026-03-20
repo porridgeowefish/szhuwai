@@ -166,7 +166,7 @@ export default function App() {
       formData.append('plan_title', planTitle);
       formData.append('key_destinations', destinations.join(','));
 
-      const response = await fetch("/api/generate-plan", {
+      const response = await fetch("/api/v1/generate-plan", {
         method: "POST",
         body: formData,
       });

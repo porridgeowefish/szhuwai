@@ -21,9 +21,22 @@ from pydantic import BaseModel, Field
 from src.domain.orchestrator import OutdoorPlannerRouter
 from src.schemas.output import OutdoorActivityPlan
 
+# 导入模块化路由
+from src.api.routes import (
+    track_router,
+    weather_router,
+    transport_router,
+    search_router,
+    plan_router
+)
+
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# ============ 常量配置 ============
+MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB - 文件上传大小限制
+API_VERSION = "v1"  # API 版本
 
 # 创建 FastAPI 应用
 app = FastAPI(
@@ -45,6 +58,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ============ 注册模块化路由 ============
+app.include_router(track_router, prefix=f"/api/{API_VERSION}")
+app.include_router(weather_router, prefix=f"/api/{API_VERSION}")
+app.include_router(transport_router, prefix=f"/api/{API_VERSION}")
+app.include_router(search_router, prefix=f"/api/{API_VERSION}")
+app.include_router(plan_router, prefix=f"/api/{API_VERSION}")
 
 
 # 响应体模型
@@ -79,7 +99,7 @@ async def health_check():
     return {"status": "healthy"}
 
 
-@app.post("/api/generate-plan", response_model=PlanResponse)
+@app.post(f"/api/{API_VERSION}/generate-plan", response_model=PlanResponse)
 async def generate_plan(
     trip_date: str = Form(..., description="出行时间(YYYY-MM-DD)"),
     departure_point: str = Form(..., description="出发地点(供高德解析使用，需尽量详细)"),
@@ -146,6 +166,14 @@ async def generate_plan(
 
         # 保存上传的文件
         content = await file.read()
+
+        # 文件大小检查
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"文件大小超过限制（最大 {MAX_FILE_SIZE // 1024 // 1024}MB）"
+            )
+
         with open(temp_file_path, "wb") as f:
             f.write(content)
 
