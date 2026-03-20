@@ -18,7 +18,8 @@ from typing import List, Literal, Optional, Union
 from loguru import logger
 
 from src.schemas.base import Point3D
-from src.schemas.track import TrackAnalysisResult, TerrainChange, ElevationPoint
+from src.schemas.track import TrackAnalysisResult, TerrainChange, ElevationPoint, TrackPointGCJ02
+from src.services.geo_coord_utils import wgs84_to_gcj02
 
 
 class TrackParseError(Exception):
@@ -195,7 +196,11 @@ class TrackParser:
         track_name: str
     ) -> TrackAnalysisResult:
         """
-        解析 KML 文件
+        解析 KML 文件（支持标准格式和 Google Earth 扩展格式）
+
+        支持两种格式：
+        1. 标准 KML: <LineString><coordinates>lon,lat,elev</coordinates></LineString>
+        2. Google Earth 扩展: <gx:Track><gx:coord>lon lat elev</gx:coord></gx:Track>
 
         Args:
             file_path: KML 文件路径
@@ -213,31 +218,54 @@ class TrackParser:
         # 解析 XML
         tree = ET.fromstring(kml_content)
 
-        # KML namespace
-        ns = {'kml': 'http://www.opengis.net/kml/2.2'}
+        # KML namespace（包含 gx 扩展）
+        ns = {
+            'kml': 'http://www.opengis.net/kml/2.2',
+            'gx': 'http://www.google.com/kml/ext/2.2'
+        }
 
         # 提取所有轨迹点
         points: List[Point3D] = []
 
-        # 查找所有 coordinates 元素
-        for coord_text in tree.findall('.//kml:coordinates', ns):
-            if coord_text.text:
-                # 解析坐标字符串
-                for coord_pair in coord_text.text.strip().split():
-                    parts = coord_pair.split(',')
-                    if len(parts) >= 2:
-                        try:
-                            lon = float(parts[0])
-                            lat = float(parts[1])
-                            elev = float(parts[2]) if len(parts) > 2 else 0
-                            points.append(Point3D(
-                                lat=lat,
-                                lon=lon,
-                                elevation=elev,
-                                timestamp=None
-                            ))
-                        except (ValueError, IndexError):
-                            continue
+        # 1. 优先尝试解析 gx:coord 格式（Google Earth 扩展格式）
+        for coord_elem in tree.findall('.//gx:coord', ns):
+            if coord_elem.text:
+                # gx:coord 格式：空格分隔的 "lon lat elev"
+                parts = coord_elem.text.strip().split()
+                if len(parts) >= 2:
+                    try:
+                        lon = float(parts[0])
+                        lat = float(parts[1])
+                        elev = float(parts[2]) if len(parts) > 2 else 0
+                        points.append(Point3D(
+                            lat=lat,
+                            lon=lon,
+                            elevation=elev,
+                            timestamp=None
+                        ))
+                    except (ValueError, IndexError):
+                        continue
+
+        # 2. 如果没有找到 gx:coord，尝试标准 coordinates 格式
+        if not points:
+            for coord_text in tree.findall('.//kml:coordinates', ns):
+                if coord_text.text:
+                    # coordinates 格式：逗号分隔的 "lon,lat,elev"，多个点用空格分隔
+                    for coord_pair in coord_text.text.strip().split():
+                        parts = coord_pair.split(',')
+                        if len(parts) >= 2:
+                            try:
+                                lon = float(parts[0])
+                                lat = float(parts[1])
+                                elev = float(parts[2]) if len(parts) > 2 else 0
+                                points.append(Point3D(
+                                    lat=lat,
+                                    lon=lon,
+                                    elevation=elev,
+                                    timestamp=None
+                                ))
+                            except (ValueError, IndexError):
+                                continue
 
         if not points:
             raise TrackParseError("KML 文件中未找到轨迹点")
@@ -526,6 +554,11 @@ class TrackParser:
             points, total_distance_m, max_elev_point, min_elev_point
         )
 
+        # ========== 生成GCJ02轨迹点（用于高德地图平面图）==========
+        track_points_gcj02 = self._generate_track_points_gcj02(
+            points, max_elev_point, min_elev_point, terrain_changes
+        )
+
         # ========== 为地形变化段添加起点距离 ==========
         # 计算每个点的累计距离
         cumulative_distances = [0.0]
@@ -599,6 +632,7 @@ class TrackParser:
             min_elev_point=min_elev_point,
             terrain_analysis=terrain_changes,
             elevation_points=elevation_points,
+            track_points_gcj02=track_points_gcj02,
             difficulty_score=difficulty_score,
             difficulty_level=difficulty_level,
             estimated_duration_hours=estimated_duration,
@@ -797,6 +831,106 @@ class TrackParser:
             ))
 
         return elevation_points
+
+    def _generate_track_points_gcj02(
+        self,
+        points: List[Point3D],
+        max_elev_point: Point3D,
+        min_elev_point: Point3D,
+        terrain_changes: List[TerrainChange],
+        max_samples: int = 200
+    ) -> List[TrackPointGCJ02]:
+        """
+        生成 GCJ02 坐标系的轨迹点（用于高德地图平面图显示）
+
+        采用智能抽样策略：
+        1. 均匀抽样最多 max_samples 个点
+        2. 强制包含关键点（起点、终点、最高点、最低点、地形变化段起终点）
+
+        Args:
+            points: 原始轨迹点列表（WGS84坐标）
+            max_elev_point: 最高海拔点
+            min_elev_point: 最低海拔点
+            terrain_changes: 地形变化段列表
+            max_samples: 最大抽样点数（默认200）
+
+        Returns:
+            List[TrackPointGCJ02]: GCJ02坐标系的轨迹点列表
+        """
+        if len(points) < 2:
+            return []
+
+        # 关键点索引集合（用于强制包含）
+        key_point_indices: set = set()
+
+        # 起点、终点
+        key_point_indices.add(0)
+        key_point_indices.add(len(points) - 1)
+
+        # 最高点、最低点
+        for i, p in enumerate(points):
+            if (abs(p.lat - max_elev_point.lat) < 1e-6 and
+                abs(p.lon - max_elev_point.lon) < 1e-6):
+                key_point_indices.add(i)
+            if (abs(p.lat - min_elev_point.lat) < 1e-6 and
+                abs(p.lon - min_elev_point.lon) < 1e-6):
+                key_point_indices.add(i)
+
+        # 地形变化段起终点
+        for tc in terrain_changes:
+            for i, p in enumerate(points):
+                if (abs(p.lat - tc.start_point.lat) < 1e-5 and
+                    abs(p.lon - tc.start_point.lon) < 1e-5):
+                    key_point_indices.add(i)
+                if (abs(p.lat - tc.end_point.lat) < 1e-5 and
+                    abs(p.lon - tc.end_point.lon) < 1e-5):
+                    key_point_indices.add(i)
+
+        # 计算抽样间隔
+        sample_step = max(1, len(points) // max_samples)
+
+        # 选择抽样点索引
+        sampled_indices: set = set()
+        for i in range(0, len(points), sample_step):
+            sampled_indices.add(i)
+
+        # 合并关键点
+        final_indices = sampled_indices | key_point_indices
+        sorted_indices = sorted(final_indices)
+
+        # 生成 GCJ02 坐标点
+        track_points_gcj02: List[TrackPointGCJ02] = []
+        for idx in sorted_indices:
+            p = points[idx]
+
+            # WGS84 -> GCJ02 坐标转换
+            gcj_lon, gcj_lat = wgs84_to_gcj02(p.lon, p.lat)
+
+            # 判断是否为关键点
+            is_key_point = idx in key_point_indices
+            label = None
+
+            if idx == 0:
+                label = '起点'
+            elif idx == len(points) - 1:
+                label = '终点'
+            elif (abs(p.lat - max_elev_point.lat) < 1e-6 and
+                  abs(p.lon - max_elev_point.lon) < 1e-6):
+                label = '最高点'
+            elif (abs(p.lat - min_elev_point.lat) < 1e-6 and
+                  abs(p.lon - min_elev_point.lon) < 1e-6):
+                label = '最低点'
+
+            track_points_gcj02.append(TrackPointGCJ02(
+                lng=round(gcj_lon, 6),
+                lat=round(gcj_lat, 6),
+                elevation=round(p.elevation, 1),
+                is_key_point=is_key_point,
+                label=label
+            ))
+
+        logger.info(f"[轨迹点抽样] 原始点数={len(points)}, 抽样后={len(track_points_gcj02)}, 关键点={len(key_point_indices)}")
+        return track_points_gcj02
 
 
 __all__ = ["TrackParser", "TrackParseError"]

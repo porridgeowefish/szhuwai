@@ -1,13 +1,26 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>My Google AI Studio App</title>
+    <title>户外出行智能策划</title>
+    <meta
+      name="description"
+      content="AI 驱动的户外徒步智能策划工具，生成专业的路线策划书"
+    />
+
+    <!-- 高德地图 JSAPI 2.0 - 请替换为您自己的 Key -->
+    <!-- 申请地址: https://console.amap.com/dev/key/app -->
+    <script>
+      window._AMapSecurityConfig = {
+        // 安全密钥（如需配置，请替换为您的安全密钥）
+        securityJsCode: "bae28b8606d4cb6635276eacf6cb22f1",
+      };
+    </script>
+    <script src="https://webapi.amap.com/maps?v=2.0&key=c2c436f0e314b3a8fa693fc9736f33e8"></script>
   </head>
   <body>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
-

@@ -21,6 +21,19 @@ class ElevationPoint(BaseModel):
     label: Optional[str] = Field(None, description="关键点标签")
 
 
+class TrackPointGCJ02(BaseModel):
+    """轨迹点（GCJ02坐标系，用于高德地图显示）
+
+    采用智能抽样策略：最多200点 + 关键点
+    预估数据量 ≈ 10KB
+    """
+    lng: float = Field(..., description="经度（GCJ02坐标系）")
+    lat: float = Field(..., description="纬度（GCJ02坐标系）")
+    elevation: float = Field(default=0, description="海拔（米）")
+    is_key_point: bool = Field(default=False, description="是否为关键点")
+    label: Optional[str] = Field(None, description="关键点标签")
+
+
 class TerrainChange(BaseModel):
     """地形变化段"""
     change_type: Literal["大爬升", "大下降"] = Field(..., description="地形变化类型")
@@ -77,6 +90,12 @@ class TrackAnalysisResult(BaseModel):
 
     # 海拔轨迹数据（用于前端可视化）
     elevation_points: List[ElevationPoint] = Field(default_factory=list, description="抽样海拔轨迹点")
+
+    # 地图轨迹数据（GCJ02坐标系，用于高德地图平面图）
+    track_points_gcj02: List[TrackPointGCJ02] = Field(
+        default_factory=list,
+        description="轨迹点（GCJ02坐标，智能抽样最多200点+关键点）"
+    )
 
     # 路线评估指标
     difficulty_score: float = Field(..., description="难度评分 (0-100)", ge=0, le=100)

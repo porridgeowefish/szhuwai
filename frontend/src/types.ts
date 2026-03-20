@@ -107,6 +107,15 @@ export interface CloudSeaAssessment {
   factors: string[];
 }
 
+// 轨迹点（GCJ02坐标系，用于高德地图平面图）
+export interface TrackPointGCJ02 {
+  lng: number;           // 经度（GCJ02）
+  lat: number;           // 纬度（GCJ02）
+  elevation: number;     // 海拔（米）
+  is_key_point: boolean; // 是否为关键点
+  label?: string;        // 关键点标签
+}
+
 export interface TrackDetailAnalysis {
   total_distance_km: number;
   total_ascent_m: number;
@@ -120,6 +129,7 @@ export interface TrackDetailAnalysis {
   safety_risk: string;
   terrain_analysis: TerrainSegment[];
   elevation_points: ElevationPoint[];  // 海拔轨迹点（用于可视化）
+  track_points_gcj02?: TrackPointGCJ02[];  // GCJ02轨迹点（用于地图）
   cloud_sea_assessment?: CloudSeaAssessment;
 }
 
