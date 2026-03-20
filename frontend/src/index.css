@@ -213,3 +213,15 @@
 .pdf-export-container {
   background: white;
 }
+
+/* PDF 导出专用样式 - 确保打印时颜色正确 */
+@media print {
+  .pdf-export-container {
+    background: white !important;
+  }
+  .pdf-export-container * {
+    color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

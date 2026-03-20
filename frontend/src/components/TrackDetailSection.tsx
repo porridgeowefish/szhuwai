@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Map as MapIcon,
   TrendingUp,
@@ -31,9 +31,13 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
   const [activeTab, setActiveTab] = useState<'map' | 'elevation'>('elevation');
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
-  const mapRef = React.useRef<AMap.Map | null>(null);
 
-  // 初始化高德地图
+  // 使用 ref 管理地图实例和覆盖物
+  const mapRef = useRef<AMap.Map | null>(null);
+  const polylineRef = useRef<AMap.Polyline | null>(null);
+  const markersRef = useRef<AMap.Marker[]>([]);
+
+  // 1. 地图初始化 - 只在 tab 切换到 map 时执行一次
   useEffect(() => {
     if (activeTab !== 'map') return;
 
@@ -57,48 +61,79 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
 
       mapRef.current = map;
       setMapLoaded(true);
-
-      // 如果有轨迹点，绘制轨迹
-      if (trackPointsGCJ02 && trackPointsGCJ02.length > 0) {
-        const path = trackPointsGCJ02.map(p => new window.AMap.LngLat(p.lng, p.lat));
-
-        const polyline = new window.AMap.Polyline({
-          path,
-          strokeColor: '#2D5A27',
-          strokeWeight: 4,
-          strokeOpacity: 0.9,
-          lineJoin: 'round',
-          lineCap: 'round'
-        });
-
-        map.add(polyline);
-
-        // 添加关键点标记
-        trackPointsGCJ02.forEach(point => {
-          if (point.isKeyPoint) {
-            const marker = new window.AMap.Marker({
-              position: new window.AMap.LngLat(point.lng, point.lat),
-              title: point.label || '关键点',
-              content: `<div style="
-                background: #dc2626;
-                color: white;
-                padding: 2px 8px;
-                border-radius: 4px;
-                font-size: 11px;
-                white-space: nowrap;
-                box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-              ">${point.label || '关键点'}</div>`
-            });
-            map.add(marker);
-          }
-        });
-
-        map.setFitView();
-      }
     } catch (err) {
       setMapError(err instanceof Error ? err.message : '地图初始化失败');
     }
-  }, [activeTab, trackPointsGCJ02]);
+
+    // 清理函数 - 组件卸载时销毁地图
+    return () => {
+      if (mapRef.current) {
+        mapRef.current.destroy();
+        mapRef.current = null;
+        setMapLoaded(false);
+      }
+    };
+  }, [activeTab]);
+
+  // 2. 轨迹绘制 - 在地图初始化完成后执行
+  useEffect(() => {
+    if (!mapRef.current || !trackPointsGCJ02 || trackPointsGCJ02.length === 0) {
+      return;
+    }
+
+    const map = mapRef.current;
+
+    // 清理旧轨迹和标记
+    if (polylineRef.current) {
+      map.remove(polylineRef.current);
+      polylineRef.current = null;
+    }
+    markersRef.current.forEach(marker => map.remove(marker));
+    markersRef.current = [];
+
+    try {
+      // 绘制新轨迹
+      const path = trackPointsGCJ02.map(p => new window.AMap.LngLat(p.lng, p.lat));
+
+      const polyline = new window.AMap.Polyline({
+        path,
+        strokeColor: '#2D5A27',
+        strokeWeight: 4,
+        strokeOpacity: 0.9,
+        lineJoin: 'round',
+        lineCap: 'round'
+      });
+
+      map.add(polyline);
+      polylineRef.current = polyline;
+
+      // 添加关键点标记
+      trackPointsGCJ02.forEach(point => {
+        if (point.isKeyPoint) {
+          const marker = new window.AMap.Marker({
+            position: new window.AMap.LngLat(point.lng, point.lat),
+            title: point.label || '关键点',
+            content: `<div style="
+              background: #dc2626;
+              color: white;
+              padding: 2px 8px;
+              border-radius: 4px;
+              font-size: 11px;
+              white-space: nowrap;
+              box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+            ">${point.label || '关键点'}</div>`
+          });
+          map.add(marker);
+          markersRef.current.push(marker);
+        }
+      });
+
+      // 自适应视野
+      map.setFitView();
+    } catch (err) {
+      console.error('轨迹绘制失败:', err);
+    }
+  }, [mapLoaded, trackPointsGCJ02]);
 
   return (
     <div className="rounded-2xl bg-white border border-[var(--stone)] overflow-hidden">

@@ -7,6 +7,56 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 
 /**
+ * 将 oklch 颜色转换为 rgb 格式
+ * html2canvas 不支持 oklch 颜色，需要转换
+ */
+function convertOklchToRgb(oklch: string): string {
+  const temp = document.createElement('div');
+  temp.style.color = oklch;
+  temp.style.display = 'none';
+  document.body.appendChild(temp);
+  const rgb = getComputedStyle(temp).color;
+  document.body.removeChild(temp);
+  return rgb;
+}
+
+/**
+ * 检查颜色值是否为 oklch 格式
+ */
+function isOklchColor(color: string): boolean {
+  return color.includes('oklch');
+}
+
+/**
+ * 递归处理元素样式，将 oklch 颜色转换为 rgb
+ */
+function processElementStyles(element: Element): void {
+  const computed = window.getComputedStyle(element);
+  const htmlEl = element as HTMLElement;
+
+  // 处理文字颜色
+  const color = computed.color;
+  if (color && isOklchColor(color)) {
+    htmlEl.style.color = convertOklchToRgb(color);
+  }
+
+  // 处理背景颜色
+  const bgColor = computed.backgroundColor;
+  if (bgColor && isOklchColor(bgColor) && bgColor !== 'rgba(0, 0, 0, 0)') {
+    htmlEl.style.backgroundColor = convertOklchToRgb(bgColor);
+  }
+
+  // 处理边框颜色
+  const borderColor = computed.borderColor;
+  if (borderColor && isOklchColor(borderColor)) {
+    htmlEl.style.borderColor = convertOklchToRgb(borderColor);
+  }
+
+  // 递归处理子元素
+  element.querySelectorAll('*').forEach(processElementStyles);
+}
+
+/**
  * 将 DOM 元素导出为 PDF
  *
  * @param element - 要导出的 DOM 元素
@@ -16,93 +66,26 @@ export async function exportToPDF(element: HTMLElement, filename: string): Promi
   try {
     console.log('开始PDF导出...', element);
 
-    // 创建一个临时容器来清理样式
-    const tempContainer = document.createElement('div');
-    tempContainer.style.position = 'absolute';
-    tempContainer.style.left = '-9999px';
-    tempContainer.style.top = '0';
-    document.body.appendChild(tempContainer);
-
-    // 克隆元素
-    const clonedElement = element.cloneNode(true) as HTMLElement;
-    tempContainer.appendChild(clonedElement);
-
-    // 移除所有包含 oklch 的 style 标签
-    const removeOklchStyles = () => {
-      const styleSheets = document.styleSheets;
-      try {
-        for (let i = 0; i < styleSheets.length; i++) {
-          const sheet = styleSheets[i];
-          try {
-            const cssRules = sheet.cssRules || sheet.rules;
-            if (cssRules) {
-              for (let j = cssRules.length - 1; j >= 0; j--) {
-                const rule = cssRules[j];
-                if (rule.cssText && rule.cssText.includes('oklch')) {
-                  sheet.deleteRule(j);
-                }
-              }
-            }
-          } catch (e) {
-            // 跨域样式表无法访问
-          }
-        }
-      } catch (e) {
-        console.warn('清理样式失败', e);
-      }
-    };
-
     // 使用 html2canvas 将 DOM 元素转换为 canvas
-    const canvas = await html2canvas(clonedElement, {
+    const canvas = await html2canvas(element, {
       scale: 2,
       useCORS: true,
       logging: false,
       backgroundColor: '#ffffff',
       allowTaint: true,
-      onclone: (clonedDoc) => {
-        // 删除所有 link 和 style 标签，重新添加纯色样式
-        const styles = clonedDoc.createElement('style');
-        styles.textContent = `
-          /* 覆盖所有可能使用 oklch 的颜色 */
-          * {
-            all: revert !important;
-            color: rgb(0, 0, 0) !important;
-            background-color: rgb(255, 255, 255) !important;
-          }
-          .text-red-50, .text-red-100, .text-red-200, .text-red-300, .text-red-400,
-          .text-red-500, .text-red-600, .text-red-700, .text-red-800, .text-red-900 { color: rgb(220, 38, 38) !important; }
-          .text-blue-50, .text-blue-100, .text-blue-200, .text-blue-300, .text-blue-400,
-          .text-blue-500, .text-blue-600, .text-blue-700, .text-blue-800, .text-blue-900 { color: rgb(37, 99, 235) !important; }
-          .text-emerald-50, .text-emerald-100, .text-emerald-200, .text-emerald-300, .text-emerald-400,
-          .text-emerald-500, .text-emerald-600, .text-emerald-700, .text-emerald-800, .text-emerald-900 { color: rgb(16, 185, 129) !important; }
-          .text-amber-50, .text-amber-100, .text-amber-200, .text-amber-300, .text-amber-400,
-          .text-amber-500, .text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900 { color: rgb(245, 158, 11) !important; }
-          .text-zinc-50, .text-zinc-100, .text-zinc-200, .text-zinc-300, .text-zinc-400,
-          .text-zinc-500, .text-zinc-600, .text-zinc-700, .text-zinc-800, .text-zinc-900 { color: rgb(63, 63, 70) !important; }
-          .text-indigo-50, .text-indigo-100, .text-indigo-200, .text-indigo-300, .text-indigo-400,
-          .text-indigo-500, .text-indigo-600, .text-indigo-700, .text-indigo-800, .text-indigo-900 { color: rgb(99, 102, 241) !important; }
-          .bg-red-50, .bg-red-100, .bg-red-200, .bg-red-300, .bg-red-400,
-          .bg-red-500, .bg-red-600, .bg-red-700, .bg-red-800, .bg-red-900 { background-color: rgb(254, 242, 242) !important; }
-          .bg-blue-50, .bg-blue-100, .bg-blue-200, .bg-blue-300, .bg-blue-400,
-          .bg-blue-500, .bg-blue-600, .bg-blue-700, .bg-blue-800, .bg-blue-900 { background-color: rgb(239, 246, 255) !important; }
-          .bg-emerald-50, .bg-emerald-100, .bg-emerald-200, .bg-emerald-300, .bg-emerald-400,
-          .bg-emerald-500, .bg-emerald-600, .bg-emerald-700, .bg-emerald-800, .bg-emerald-900 { background-color: rgb(236, 253, 245) !important; }
-          .bg-amber-50, .bg-amber-100, .bg-amber-200, .bg-amber-300, .bg-amber-400,
-          .bg-amber-500, .bg-amber-600, .bg-amber-700, .bg-amber-800, .bg-amber-900 { background-color: rgb(254, 243, 199) !important; }
-          .bg-zinc-50, .bg-zinc-100, .bg-zinc-200, .bg-zinc-300, .bg-zinc-400,
-          .bg-zinc-500, .bg-zinc-600, .bg-zinc-700, .bg-zinc-800, .bg-zinc-900 { background-color: rgb(250, 250, 250) !important; }
-          .bg-indigo-50, .bg-indigo-100, .bg-indigo-200, .bg-indigo-300, .bg-indigo-400,
-          .bg-indigo-500, .bg-indigo-600, .bg-indigo-700, .bg-indigo-800, .bg-indigo-900 { background-color: rgb(238, 242, 255) !important; }
-          .bg-white { background-color: rgb(255, 255, 255) !important; }
-          .text-white { color: rgb(255, 255, 255) !important; }
-          .text-black { color: rgb(0, 0, 0) !important; }
-        `;
-        clonedDoc.head.appendChild(styles);
+      scrollX: 0,
+      scrollY: -window.scrollY,
+      onclone: (clonedDoc, clonedElement) => {
+        // 递归处理所有元素，将 oklch 颜色转换为 rgb
+        processElementStyles(clonedElement);
+
+        // 确保 PDF 导出容器样式正确
+        const pdfContainer = clonedElement.querySelector('.pdf-export-container') as HTMLElement;
+        if (pdfContainer) {
+          pdfContainer.style.background = 'white';
+        }
       },
     });
-
-    // 清理临时容器
-    document.body.removeChild(tempContainer);
 
     console.log('Canvas生成完成', canvas.width, canvas.height);
 
