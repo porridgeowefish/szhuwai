@@ -29,31 +29,27 @@ function isOklchColor(color: string): boolean {
 
 /**
  * 递归处理元素样式，将 oklch 颜色转换为 rgb
+ * 遍历所有 CSS 属性，确保不遗漏任何 oklch 颜色
  */
 function processElementStyles(element: Element): void {
   const computed = window.getComputedStyle(element);
   const htmlEl = element as HTMLElement;
 
-  // 处理文字颜色
-  const color = computed.color;
-  if (color && isOklchColor(color)) {
-    htmlEl.style.color = convertOklchToRgb(color);
-  }
-
-  // 处理背景颜色
-  const bgColor = computed.backgroundColor;
-  if (bgColor && isOklchColor(bgColor) && bgColor !== 'rgba(0, 0, 0, 0)') {
-    htmlEl.style.backgroundColor = convertOklchToRgb(bgColor);
-  }
-
-  // 处理边框颜色
-  const borderColor = computed.borderColor;
-  if (borderColor && isOklchColor(borderColor)) {
-    htmlEl.style.borderColor = convertOklchToRgb(borderColor);
+  // 遍历所有 CSS 属性，转换其中的 oklch 颜色
+  for (let i = 0; i < computed.length; i++) {
+    const prop = computed[i];
+    const value = computed.getPropertyValue(prop);
+    if (value && value.includes('oklch')) {
+      // 使用正则替换所有 oklch 值
+      const newValue = value.replace(/oklch\([^)]+\)/g, (match) => {
+        return convertOklchToRgb(match);
+      });
+      htmlEl.style.setProperty(prop, newValue, 'important');
+    }
   }
 
   // 递归处理子元素
-  element.querySelectorAll('*').forEach(processElementStyles);
+  Array.from(element.children).forEach(processElementStyles);
 }
 
 /**

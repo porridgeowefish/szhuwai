@@ -15,8 +15,35 @@ env:
   FRONTEND_IMAGE: szhuwai-frontend
 
 jobs:
+  # CI: 代码质量检查和测试
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: cd backend && ruff check .
+
+      - name: Type check (mypy)
+        run: cd backend && mypy src/ --strict
+        continue-on-error: true  # 初期允许类型检查失败
+
+      - name: Run tests
+        run: cd backend && pytest test/ -v -m "not slow and not api"
+
   # CI: 构建并推送后端镜像
   build-backend:
+    needs: test  # 测试通过后才构建
     runs-on: ubuntu-latest
 
     steps:
@@ -47,6 +74,7 @@ jobs:
 
   # CI: 构建并推送前端镜像
   build-frontend:
+    needs: test  # 测试通过后才构建
     runs-on: ubuntu-latest
 
     steps:

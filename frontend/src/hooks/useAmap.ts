@@ -14,6 +14,7 @@ interface TrackPoint {
   elevation?: number;
   label?: string;
   isKeyPoint?: boolean;
+  is_key_point?: boolean;  // 兼容下划线命名
 }
 
 /**
@@ -127,7 +128,7 @@ export function useAmap(containerId: string, securityKey?: string) {
 
     // 添加关键点标记
     points.forEach((point, index) => {
-      if (point.isKeyPoint) {
+      if (point.isKeyPoint || point.is_key_point) {
         const marker = new window.AMap.Marker({
           position: new window.AMap.LngLat(point.lng, point.lat),
           title: point.label || `点${index + 1}`,

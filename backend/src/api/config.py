@@ -130,7 +130,13 @@ class APIConfig(BaseModel):
 
     @classmethod
     def from_env(cls, env_file: str = ".env") -> "APIConfig":
-        """从环境文件加载配置"""
+        """从环境文件加载配置
+
+        智能查找 .env 文件：
+        1. 优先从环境变量加载（Docker/云端部署方式）
+        2. 查找当前目录的 .env
+        3. 向上查找父目录的 .env（支持从 backend/ 目录运行）
+        """
         # 优先从环境变量加载
         config_data = {}
 
@@ -148,9 +154,12 @@ class APIConfig(BaseModel):
             if env_value:
                 config_data[config_key] = env_value
 
+        # 智能查找 .env 文件路径
+        env_path = cls._find_env_file(env_file)
+
         # 如果.env文件存在，加载它
-        if os.path.exists(env_file):
-            with open(env_file, 'r', encoding='utf-8') as f:
+        if env_path and os.path.exists(env_path):
+            with open(env_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
                     if line and not line.startswith('#'):
@@ -160,21 +169,55 @@ class APIConfig(BaseModel):
                             value = value.strip()
                             # 处理环境变量映射
                             if key in env_mapping:
-                                config_data[env_mapping[key]] = value
+                                # 环境变量优先于文件配置
+                                if env_mapping[key] not in config_data:
+                                    config_data[env_mapping[key]] = value
                             # 处理代理配置
                             elif key == 'PROXY_HTTP':
-                                if 'proxy' not in config_data:
-                                    config_data['proxy'] = {}
-                                config_data['proxy']['http'] = value
+                                if 'PROXY' not in config_data:
+                                    config_data['PROXY'] = {}
+                                config_data['PROXY']['http'] = value
                             elif key == 'PROXY_HTTPS':
-                                if 'proxy' not in config_data:
-                                    config_data['proxy'] = {}
-                                config_data['proxy']['https'] = value
+                                if 'PROXY' not in config_data:
+                                    config_data['PROXY'] = {}
+                                config_data['PROXY']['https'] = value
                             # 处理其他配置项
-                            elif key in cls.model_fields:
+                            elif key in cls.model_fields and key not in config_data:
                                 config_data[key] = value
 
         return cls(**config_data)
+
+    @classmethod
+    def _find_env_file(cls, env_file: str = ".env") -> str | None:
+        """智能查找 .env 文件
+
+        查找顺序：
+        1. 当前工作目录
+        2. 当前脚本所在目录
+        3. 向上逐级查找父目录（最多 5 层）
+        """
+        # 1. 当前工作目录
+        if os.path.exists(env_file):
+            return env_file
+
+        # 2. 当前脚本所在目录
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        script_env = os.path.join(script_dir, env_file)
+        if os.path.exists(script_env):
+            return script_env
+
+        # 3. 向上查找父目录
+        current_dir = os.getcwd()
+        for _ in range(5):  # 最多向上查找 5 层
+            parent_env = os.path.join(current_dir, env_file)
+            if os.path.exists(parent_env):
+                return parent_env
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:  # 已到达根目录
+                break
+            current_dir = parent_dir
+
+        return None
 
     def get_cache_key(self, api_type: str, params: Dict) -> str:
         """生成缓存键"""

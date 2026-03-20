@@ -53,8 +53,15 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
     }
 
     try {
+      // 计算地图中心点：使用第一个轨迹点或默认位置
+      const defaultCenter: [number, number] = [103.8, 30.0];
+      const center = (trackPointsGCJ02 && trackPointsGCJ02.length > 0)
+        ? [trackPointsGCJ02[0].lng, trackPointsGCJ02[0].lat] as [number, number]
+        : defaultCenter;
+
       const map = new window.AMap.Map('track-map-container', {
         zoom: 12,
+        center,
         mapStyle: 'amap://styles/whitesmoke',
         viewMode: '2D'
       });
@@ -77,6 +84,11 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
 
   // 2. 轨迹绘制 - 在地图初始化完成后执行
   useEffect(() => {
+    console.log('轨迹绘制 useEffect 触发', {
+      hasMap: !!mapRef.current,
+      pointsCount: trackPointsGCJ02?.length || 0
+    });
+
     if (!mapRef.current || !trackPointsGCJ02 || trackPointsGCJ02.length === 0) {
       return;
     }
@@ -109,7 +121,7 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
 
       // 添加关键点标记
       trackPointsGCJ02.forEach(point => {
-        if (point.isKeyPoint) {
+        if (point.is_key_point) {
           const marker = new window.AMap.Marker({
             position: new window.AMap.LngLat(point.lng, point.lat),
             title: point.label || '关键点',
