@@ -138,10 +138,10 @@ class TrackParser:
             else:
                 return self._parse_kml(file_path, track_name)
         except ImportError as e:
-            logger.error(f"解析库未安装: {e}")
+            logger.error(f"Parser library not installed: {e}")
             raise TrackParseError("请安装 gpxpy: pip install gpxpy") from e
         except Exception as e:
-            logger.error(f"解析文件 {file_path} 失败: {e}")
+            logger.error(f"Failed to parse file {file_path}: {e}")
             raise TrackParseError(f"解析失败: {e}") from e
 
     def _parse_gpx(
@@ -182,11 +182,11 @@ class TrackParser:
         if not points:
             raise TrackParseError("GPX 文件中未找到轨迹点")
 
-        logger.info(f"从 {file_path} 解析到 {len(points)} 个轨迹点")
+        logger.info(f"Parsed {len(points)} track points from {file_path}")
 
         # 对轨迹点进行平滑处理（去除海拔噪点）
         smoothed_points = self._smooth_elevation(points)
-        logger.info("海拔平滑处理完成")
+        logger.info("Elevation smoothing completed")
 
         return self._analyze_points(smoothed_points, track_name)
 
@@ -270,11 +270,11 @@ class TrackParser:
         if not points:
             raise TrackParseError("KML 文件中未找到轨迹点")
 
-        logger.info(f"从 {file_path} 解析到 {len(points)} 个轨迹点")
+        logger.info(f"Parsed {len(points)} track points from {file_path}")
 
         # 对轨迹点进行平滑处理（去除海拔噪点）
         smoothed_points = self._smooth_elevation(points)
-        logger.info("海拔平滑处理完成")
+        logger.info("Elevation smoothing completed")
 
         return self._analyze_points(smoothed_points, track_name)
 
@@ -383,7 +383,7 @@ class TrackParser:
                         total_descent = descent_start.elevation - descent_valley.elevation
                         if total_descent > self.LARGE_DESCENT_THRESHOLD:
                             terrain_changes.append(TerrainChange(
-                                change_type="大下降",
+                                change_type="large_descent",
                                 start_point=descent_start,
                                 end_point=descent_valley,
                                 elevation_diff=total_descent,
@@ -404,11 +404,11 @@ class TrackParser:
                     if descent_from_peak >= self.LARGE_ASCENT_DESCENT_TOLERANCE:
                         # 下降超过阈值，检查是否满足大爬升条件
                         total_ascent = ascent_peak.elevation - ascent_start.elevation
-                        logger.info(f"[大爬升检测] 检测到下降超过阈值({self.LARGE_ASCENT_DESCENT_TOLERANCE}m), 当前爬升={total_ascent}m, 阈值={self.LARGE_ASCENT_THRESHOLD}m")
+                        logger.info(f"[Ascent] Descent exceeds tolerance({self.LARGE_ASCENT_DESCENT_TOLERANCE}m), current ascent={total_ascent}m, threshold={self.LARGE_ASCENT_THRESHOLD}m")
                         if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
-                            logger.info(f"[大爬升检测] 识别到大爬升! 上升={total_ascent}m, 距离={ascent_distance_m}m")
+                            logger.info(f"[Ascent] Large ascent detected! ascent={total_ascent}m, distance={ascent_distance_m}m")
                             terrain_changes.append(TerrainChange(
-                                change_type="大爬升",
+                                change_type="large_ascent",
                                 start_point=ascent_start,
                                 end_point=ascent_peak,
                                 elevation_diff=total_ascent,
@@ -445,7 +445,7 @@ class TrackParser:
             if ascent_start is not None and ascent_distance_m >= self.GRADIENT_CHECK_DISTANCE_M:
                 # 找到 1km 前的点
                 check_distance = 0.0
-                check_idx = i
+                check_idx = ascent_last_check_idx + 1  # 默认使用最远可检查点
                 for j in range(i, ascent_last_check_idx, -1):
                     if j > 0:
                         seg_dist = self._haversine_distance(
@@ -457,11 +457,12 @@ class TrackParser:
                             check_idx = j
                             break
 
-                # 计算这 1km 内的海拔变化
+                # 计算这 1km 内的海拔变化（允许一定误差，使用实际找到的最远点）
                 elev_change = abs(points[i+1].elevation - points[check_idx].elevation)
                 if elev_change < self.MIN_GRADIENT_THRESHOLD_M:
                     # 坡度太缓，中断当前爬升段
                     total_ascent = ascent_peak.elevation - ascent_start.elevation
+                    logger.info(f"[Gradient] Ascent segment interrupted: elev_change={elev_change:.0f}m < {self.MIN_GRADIENT_THRESHOLD_M}m in 1km, current_ascent={total_ascent:.0f}m")
                     if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
                         terrain_changes.append(TerrainChange(
                             change_type="大爬升",
@@ -484,7 +485,7 @@ class TrackParser:
             if descent_start is not None and descent_distance_m >= self.GRADIENT_CHECK_DISTANCE_M:
                 # 找到 1km 前的点
                 check_distance = 0.0
-                check_idx = i
+                check_idx = descent_last_check_idx + 1  # 默认使用最远可检查点
                 for j in range(i, descent_last_check_idx, -1):
                     if j > 0:
                         seg_dist = self._haversine_distance(
@@ -501,6 +502,7 @@ class TrackParser:
                 if elev_change < self.MIN_GRADIENT_THRESHOLD_M:
                     # 坡度太缓，中断当前下降段
                     total_descent = descent_start.elevation - descent_valley.elevation
+                    logger.info(f"[Gradient] Descent segment interrupted: elev_change={elev_change:.0f}m < {self.MIN_GRADIENT_THRESHOLD_M}m in 1km, current_descent={total_descent:.0f}m")
                     if total_descent > self.LARGE_DESCENT_THRESHOLD:
                         terrain_changes.append(TerrainChange(
                             change_type="大下降",
@@ -520,10 +522,10 @@ class TrackParser:
                     descent_last_check_idx = i
 
         # ========== 处理最后一个未结束的段 ==========
-        logger.info(f"[大爬升检测] 轨迹结束，未结束的爬升段: start={ascent_start.elevation if ascent_start else None}m, peak={ascent_peak.elevation if ascent_peak else None}m")
+        logger.info(f"[Ascent] Track ended, pending ascent segment: start={ascent_start.elevation if ascent_start else None}m, peak={ascent_peak.elevation if ascent_peak else None}m")
         if ascent_start is not None and ascent_peak is not None:
             total_ascent = ascent_peak.elevation - ascent_start.elevation
-            logger.info(f"[大爬升检测] 最终爬升段: 上升={total_ascent}m, 距离={ascent_distance_m}m, 阈值={self.LARGE_ASCENT_THRESHOLD}m")
+            logger.info(f"[Ascent] Final ascent segment: ascent={total_ascent}m, distance={ascent_distance_m}m, threshold={self.LARGE_ASCENT_THRESHOLD}m")
             if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
                 terrain_changes.append(TerrainChange(
                     change_type="大爬升",
@@ -578,10 +580,10 @@ class TrackParser:
                     abs(p.lon - tc.start_point.lon) < 1e-5):
                     tc.start_distance_m = cumulative_distances[idx]
                     found = True
-                    logger.info(f"[地形检测] {tc.change_type}: 起点距离={cumulative_distances[idx]:.1f}m, 上升={tc.elevation_diff}m")
+                    logger.info(f"[Terrain] {tc.change_type}: start_distance={cumulative_distances[idx]:.1f}m, ascent={tc.elevation_diff}m")
                     break
             if not found:
-                logger.warning(f"[地形检测] {tc.change_type} 无法匹配起点: start_point=({tc.start_point.lat}, {tc.start_point.lon})")
+                logger.warning(f"[Terrain] {tc.change_type} cannot match start point: start_point=({tc.start_point.lat}, {tc.start_point.lon})")
 
         # 计算难度评分
         difficulty_score = self._calculate_difficulty_score(
@@ -929,7 +931,7 @@ class TrackParser:
                 label=label
             ))
 
-        logger.info(f"[轨迹点抽样] 原始点数={len(points)}, 抽样后={len(track_points_gcj02)}, 关键点={len(key_point_indices)}")
+        logger.info(f"[Sampling] original={len(points)}, sampled={len(track_points_gcj02)}, key_points={len(key_point_indices)}")
         return track_points_gcj02
 
 

@@ -153,7 +153,7 @@ class GridPointWeather(BaseModel):
 
 class TerrainSegment(BaseModel):
     """地形分析路段"""
-    change_type: Literal["大爬升", "大下降"] = Field(..., description="地形变化类型")
+    change_type: Literal["large_ascent", "large_descent"] = Field(..., description="Terrain change type")
     elevation_diff: float = Field(..., description="海拔变化量 (米)")
     distance_m: float = Field(..., description="路段距离 (米)")
     gradient_percent: float = Field(..., description="坡度百分比")

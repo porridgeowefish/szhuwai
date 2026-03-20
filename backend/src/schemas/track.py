@@ -36,7 +36,7 @@ class TrackPointGCJ02(BaseModel):
 
 class TerrainChange(BaseModel):
     """地形变化段"""
-    change_type: Literal["大爬升", "大下降"] = Field(..., description="地形变化类型")
+    change_type: Literal["large_ascent", "large_descent"] = Field(..., description="Terrain change type")
     start_point: Point3D = Field(..., description="路段起点")
     end_point: Point3D = Field(..., description="路段终点")
     start_distance_m: float = Field(default=0, description="起点累计距离（米）")
