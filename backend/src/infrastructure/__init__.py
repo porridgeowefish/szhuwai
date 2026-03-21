@@ -11,10 +11,36 @@ from src.infrastructure.mysql_client import (
     get_mysql_client,
     init_mysql_client,
 )
+from src.infrastructure.mongo_client import (
+    MongoClientWrapper,
+    get_mongo_client,
+    init_mongo_client,
+)
+from src.infrastructure.jwt_handler import (
+    JWTHandler,
+    TokenPayload,
+    get_jwt_handler,
+    init_jwt_handler,
+)
+from src.infrastructure.password_hasher import (
+    PasswordHasher,
+    get_password_hasher,
+    password_hasher,
+)
 
 __all__ = [
     "MySQLClient",
     "Base",
     "get_mysql_client",
     "init_mysql_client",
+    "MongoClientWrapper",
+    "get_mongo_client",
+    "init_mongo_client",
+    "JWTHandler",
+    "TokenPayload",
+    "get_jwt_handler",
+    "init_jwt_handler",
+    "PasswordHasher",
+    "get_password_hasher",
+    "password_hasher",
 ]

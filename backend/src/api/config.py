@@ -125,9 +125,48 @@ class APIConfig(BaseModel):
         description="连接池大小"
     )
 
+    # MongoDB 配置
+    MONGO_HOST: str = Field(
+        default="localhost",
+        description="MongoDB 主机"
+    )
+    MONGO_PORT: int = Field(
+        default=27017,
+        ge=1,
+        le=65535,
+        description="MongoDB 端口"
+    )
+    MONGO_USER: str = Field(
+        default="",
+        description="MongoDB 用户名"
+    )
+    MONGO_PASSWORD: str = Field(
+        default="",
+        description="MongoDB 密码"
+    )
+    MONGO_DATABASE: str = Field(
+        default="outdoor_planner",
+        description="数据库名"
+    )
+
+    # JWT 配置
+    JWT_SECRET_KEY: str = Field(
+        default="change-me-in-production",
+        description="JWT 签名密钥"
+    )
+    JWT_ALGORITHM: str = Field(
+        default="HS256",
+        description="JWT 签名算法"
+    )
+    JWT_EXPIRE_SECONDS: int = Field(
+        default=86400,  # 24小时
+        ge=1,
+        description="Token 有效期（秒）"
+    )
+
     @field_validator(
         'TIMEOUT', 'RETRY', 'RATE_LIMIT', 'CACHE_TTL', 'CACHE_MAX_SIZE',
-        'MYSQL_POOL_SIZE'
+        'MYSQL_POOL_SIZE', 'MONGO_PORT'
     )
     @classmethod
     def validate_positive_numbers(cls, v: int) -> int:
@@ -187,6 +226,12 @@ class APIConfig(BaseModel):
             "MYSQL_PASSWORD": "MYSQL_PASSWORD",
             "MYSQL_DATABASE": "MYSQL_DATABASE",
             "MYSQL_POOL_SIZE": "MYSQL_POOL_SIZE",
+            # MongoDB 环境变量
+            "MONGO_HOST": "MONGO_HOST",
+            "MONGO_PORT": "MONGO_PORT",
+            "MONGO_USER": "MONGO_USER",
+            "MONGO_PASSWORD": "MONGO_PASSWORD",
+            "MONGO_DATABASE": "MONGO_DATABASE",
         }
 
         for env_var, config_key in env_mapping.items():
