@@ -26,6 +26,10 @@ sys.path.insert(0, str(project_root))
 _test_engine = None
 _test_session_factory = None
 
+# 全局测试报告存储（用于模拟 MongoDB）
+_test_reports: dict[str, dict] = {}  # report_id -> report_data
+_test_report_counter = 0  # 用于生成唯一的 report_id
+
 
 def create_test_engine_and_session():
     """创建测试数据库引擎和会话工厂"""
@@ -63,6 +67,10 @@ def _get_test_db():
     session = _test_session_factory()
     try:
         yield session
+        session.commit()
+    except Exception:
+        session.rollback()
+        raise
     finally:
         session.close()
 
@@ -100,6 +108,7 @@ def setup_test_database():
 @pytest.fixture(scope="function", autouse=True)
 def clean_database():
     """每个测试后清理数据库"""
+    global _test_reports, _test_report_counter
     yield
     # 清理所有表数据
     if _test_session_factory:
@@ -112,6 +121,9 @@ def clean_database():
             session.commit()
         finally:
             session.close()
+    # 清理测试报告
+    _test_reports.clear()
+    _test_report_counter = 0
 
 
 @pytest.fixture(scope="function")
@@ -133,23 +145,31 @@ def client(mocker) -> TestClient:
     from src.infrastructure.aliyun_sms_client import SmsSendResult
 
     # 全局验证码存储
-    global _test_sms_codes
+    global _test_sms_codes, _test_reports, _test_report_counter
     _test_sms_codes.clear()
+    _test_reports.clear()
+    _test_report_counter = 0
 
     # Mock 全局 MySQL 客户端
     mock_mysql_client = mocker.MagicMock()
     mocker.patch("src.infrastructure.mysql_client.mysql_client", mock_mysql_client)
     mocker.patch("src.infrastructure.mysql_client.get_mysql_client", return_value=mock_mysql_client)
 
-    # Mock JWT 客户端
-    mock_jwt_handler = mocker.MagicMock()
-    mock_jwt_handler.create_token.return_value = "test_jwt_token_12345"
-    mock_jwt_handler.verify_token.return_value = mocker.MagicMock(
-        user_id=1,
-        username="testuser",
-        role="user",
-        exp=int((datetime.now(tz=timezone.utc) + timedelta(hours=1)).timestamp())
+    # Mock JWT 客户端 - 使用真实的 JWT handler 来支持多用户
+    from src.infrastructure.jwt_handler import JWTHandler
+    from src.api.config import APIConfig
+
+    jwt_config = APIConfig(
+        JWT_SECRET_KEY="test_secret_key_for_testing_only",
+        JWT_ALGORITHM="HS256",
+        JWT_EXPIRE_SECONDS=3600
     )
+    real_jwt_handler = JWTHandler(jwt_config)
+
+    mock_jwt_handler = mocker.MagicMock()
+    # 使用真实的 create_token 和 verify_token
+    mock_jwt_handler.create_token = real_jwt_handler.create_token
+    mock_jwt_handler.verify_token = real_jwt_handler.verify_token
     mocker.patch("src.infrastructure.jwt_handler.jwt_handler", mock_jwt_handler)
     mocker.patch("src.infrastructure.jwt_handler.get_jwt_handler", return_value=mock_jwt_handler)
 
@@ -164,8 +184,149 @@ def client(mocker) -> TestClient:
     mocker.patch("src.infrastructure.aliyun_sms_client.aliyun_sms_client", mock_sms_client)
     mocker.patch("src.infrastructure.aliyun_sms_client.get_aliyun_sms_client", return_value=mock_sms_client)
 
-    # Mock MongoDB 客户端
+    # Mock MongoDB 客户端 - 配置报告存储
     mock_mongo_client = mocker.MagicMock()
+    mock_db = mocker.MagicMock()
+    mock_collection = mocker.MagicMock()
+
+    # 模拟 insert_one
+    def mock_insert_one(data):
+        from bson import ObjectId
+        from datetime import datetime, timezone
+        global _test_report_counter
+        _test_report_counter += 1
+        # 生成有效的 ObjectId
+        report_id = str(ObjectId())
+        # 处理 ReportCreate 对象，转换为文档格式
+        now = datetime.now(tz=timezone.utc)
+        if hasattr(data, 'user_id'):  # ReportCreate 对象
+            doc = {
+                "_id": report_id,
+                "user_id": data.user_id,
+                "plan_name": data.plan_name,
+                "trip_date": data.trip_date,
+                "overall_rating": data.overall_rating,
+                "content": data.content,
+                "created_at": now,
+                "deleted_at": None,
+            }
+        else:  # 直接的文档格式
+            doc = {**data, "_id": report_id, "created_at": now, "deleted_at": None}
+        _test_reports[report_id] = doc
+        return MagicMock(inserted_id=report_id)
+
+    mock_collection.insert_one = mock_insert_one
+
+    # 模拟 count_documents
+    def mock_count_documents(query):
+        # 简单实现：返回所有报告数量（忽略查询条件）
+        return len(_test_reports)
+
+    mock_collection.count_documents = mock_count_documents
+
+    # 模拟 find() 返回游标
+    def mock_find(query=None):
+        # 返回匹配的报告列表（过滤已删除的报告）
+        reports = []
+        for report in _test_reports.values():
+            # 跳过已删除的报告
+            if report.get("deleted_at") is not None:
+                continue
+            # 简单实现：忽略其他查询条件（实际应该检查 user_id 等）
+            reports.append(report)
+
+        # 创建模拟游标
+        mock_cursor = MagicMock()
+
+        def mock_skip(n):
+            mock_cursor._skip = n
+            return mock_cursor
+
+        def mock_limit(n):
+            mock_cursor._limit = n
+            return mock_cursor
+
+        def mock_sort(key, direction=None):
+            mock_cursor._sort = key
+            mock_cursor._direction = direction
+            return mock_cursor
+
+        def mock_iter():
+            # 应用 skip、limit、sort
+            result = reports.copy()
+            if hasattr(mock_cursor, '_skip'):
+                result = result[mock_cursor._skip:]
+            if hasattr(mock_cursor, '_limit'):
+                result = result[:mock_cursor._limit]
+            return iter(result)
+
+        mock_cursor.skip = mock_skip
+        mock_cursor.limit = mock_limit
+        mock_cursor.sort = mock_sort
+        mock_cursor.__iter__ = lambda self: iter(mock_iter())
+
+        return mock_cursor
+
+    mock_collection.find = mock_find
+
+    # 模拟 find_one
+    def mock_find_one(query):
+        # 处理查询条件
+        if not query:
+            return next(iter(_test_reports.values()), None)
+
+        # 通过 report_id 查找
+        if "_id" in query:
+            report_id = str(query["_id"])
+            report = _test_reports.get(report_id)
+
+            # 检查报告是否存在且未删除
+            if report and report.get("deleted_at") is not None:
+                return None
+
+            # 检查其他查询条件（如 user_id, deleted_at）
+            if report:
+                # 检查 user_id 条件
+                if "user_id" in query and report.get("user_id") != query["user_id"]:
+                    return None
+                # 检查 deleted_at 条件
+                if "deleted_at" in query:
+                    if query["deleted_at"] is None and report.get("deleted_at") is not None:
+                        return None
+                    if query["deleted_at"] is not None and report.get("deleted_at") != query["deleted_at"]:
+                        return None
+
+            return report
+
+        # 返回第一个匹配的报告（简化处理）
+        for report in _test_reports.values():
+            if report.get("deleted_at") is None:
+                return report
+        return None
+
+    mock_collection.find_one = mock_find_one
+
+    # 模拟 update_one
+    def mock_update_one(query, update):
+        # 简单实现：标记报告为已删除
+        if "_id" in query:
+            report_id = str(query["_id"])
+            if report_id in _test_reports:
+                _test_reports[report_id]["deleted_at"] = datetime.now(tz=timezone.utc).isoformat()
+                return MagicMock(matched_count=1, modified_count=1)
+        return MagicMock(matched_count=0, modified_count=0)
+
+    mock_collection.update_one = mock_update_one
+
+    # 配置 db 和 collection
+    # 使用 __class__.__getitem__ 来避免 lambda 参数问题
+    class MockDb:
+        def __getitem__(self, name):
+            return mock_collection
+
+    mock_db = MockDb()
+    mock_mongo_client.db = mock_db
+
     mocker.patch("src.infrastructure.mongo_client.mongo_client", mock_mongo_client)
     mocker.patch("src.infrastructure.mongo_client.get_mongo_client", return_value=mock_mongo_client)
 

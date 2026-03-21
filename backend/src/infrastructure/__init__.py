@@ -27,6 +27,12 @@ from src.infrastructure.password_hasher import (
     get_password_hasher,
     password_hasher,
 )
+from src.infrastructure.aliyun_sms_client import (
+    AliyunSmsClient,
+    SmsSendResult,
+    get_aliyun_sms_client,
+    init_aliyun_sms_client,
+)
 
 __all__ = [
     "MySQLClient",
@@ -43,4 +49,8 @@ __all__ = [
     "PasswordHasher",
     "get_password_hasher",
     "password_hasher",
+    "AliyunSmsClient",
+    "SmsSendResult",
+    "get_aliyun_sms_client",
+    "init_aliyun_sms_client",
 ]

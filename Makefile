@@ -1,131 +1,110 @@
 # Makefile for Outdoor Agent Planner
-# Provides convenient commands for development, testing, and building
+# Docker Compose 部署方式
 
-.PHONY: help test test-all test-schemas test-api test-integration test-fast \
-        lint format type-check clean install check-all \
-        frontend-dev frontend-build frontend-lint \
-        docker-up docker-down docker-build
+.PHONY: help start stop restart logs status clean build \
+        test lint typecheck install
 
 # Default target
 help:
-	@echo "Outdoor Agent Planner - Available Commands:"
+	@echo "Outdoor Agent Planner - Docker 部署:"
 	@echo ""
-	@echo "Backend (Python/FastAPI):"
-	@echo "  make test          - Run all backend tests"
-	@echo "  make test-schemas  - Run schema tests only"
-	@echo "  make test-api      - Run API tests only"
-	@echo "  make lint          - Run linter (ruff check)"
-	@echo "  make format        - Format code (ruff format)"
-	@echo "  make type-check    - Run type checker (mypy)"
-	@echo "  make check-all     - Run all quality checks"
+	@echo "快速启动:"
+	@echo "  make start      - 启动所有服务 (数据库 + 后端)"
+	@echo "  make stop       - 停止所有服务"
+	@echo "  make restart    - 重启服务"
+	@echo "  make logs       - 查看日志"
+	@echo "  make status     - 查看服务状态"
 	@echo ""
-	@echo "Frontend (React/TypeScript):"
-	@echo "  make frontend-dev     - Start frontend dev server"
-	@echo "  make frontend-build   - Build frontend for production"
-	@echo "  make frontend-lint    - Run frontend linter"
+	@echo "开发测试:"
+	@echo "  make test       - 运行测试"
+	@echo "  make lint       - 代码检查"
+	@echo "  make typecheck  - 类型检查"
 	@echo ""
-	@echo "Docker:"
-	@echo "  make docker-up     - Start all services with docker-compose"
-	@echo "  make docker-down   - Stop all services"
-	@echo "  make docker-build  - Rebuild all Docker images"
+	@echo "构建清理:"
+	@echo "  make build      - 重新构建镜像"
+	@echo "  make clean      - 清理容器和数据卷"
 	@echo ""
-	@echo "Development:"
-	@echo "  make install       - Install backend dependencies"
-	@echo "  make clean         - Clean cache and build artifacts"
-	@echo ""
-
-# ============================================
-# Backend Commands
-# ============================================
-
-# Testing commands
-test test-all:
-	cd backend && pytest test/ -v
-
-test-schemas:
-	cd backend && pytest test/schemas/ -v
-
-test-api:
-	cd backend && pytest test/api/ -v
-
-test-integration:
-	cd backend && pytest test/integration/ -v -m integration
-
-test-fast:
-	cd backend && pytest test/ -v -m "not slow"
-
-# Code quality commands
-lint:
-	cd backend && ruff check .
-
-format:
-	cd backend && ruff format .
-
-type-check:
-	cd backend && mypy src/ --strict
-
-check-all: lint format type-check
-	@echo ""
-	@echo "All backend checks passed!"
-
-# Coverage commands
-run-coverage:
-	cd backend && pytest test/ --cov=src --cov-report=term --cov-report=html
-
-coverage-html: run-coverage
-	@echo ""
-	@echo "Coverage report generated in backend/htmlcov/index.html"
-
-# Development commands
-install:
-	cd backend && pip install -r requirements.txt
-
-# ============================================
-# Frontend Commands
-# ============================================
-
-frontend-dev:
-	cd frontend && npm run dev
-
-frontend-build:
-	cd frontend && npm run build
-
-frontend-lint:
-	cd frontend && npm run lint
-
-frontend-install:
-	cd frontend && npm install
+	@echo "访问地址:"
+	@echo "  http://localhost:8000"
+	@echo "  http://localhost:8000/docs"
 
 # ============================================
 # Docker Commands
 # ============================================
 
-docker-up:
+start:
+	@echo "启动所有服务..."
 	docker-compose up -d
+	@echo ""
+	@echo "服务已启动!"
+	@echo "API: http://localhost:8000"
+	@echo "文档: http://localhost:8000/docs"
 
-docker-down:
+stop:
+	@echo "停止所有服务..."
 	docker-compose down
 
-docker-build:
+restart:
+	@echo "重启服务..."
+	docker-compose restart
+
+logs:
+	docker-compose logs -f
+
+status:
+	@docker-compose ps
+
+# 仅启动数据库
+db:
+	docker-compose up -d mysql mongodb
+
+# 仅启动后端
+backend-only:
+	docker-compose up -d backend
+
+# ============================================
+# Build Commands
+# ============================================
+
+build:
+	@echo "重新构建镜像..."
 	docker-compose build --no-cache
 
-docker-logs:
-	docker-compose logs -f
+rebuild: build
+
+# ============================================
+# Development Commands
+# ============================================
+
+# 在 Docker 容器中运行测试
+test:
+	docker-compose exec backend pytest test/ -v
+
+# 代码检查
+lint:
+	docker-compose exec backend ruff check .
+
+# 类型检查
+typecheck:
+	docker-compose exec backend mypy src/ --strict
 
 # ============================================
 # Clean Commands
 # ============================================
 
 clean:
-	@echo "Cleaning cache and build artifacts..."
-	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".mypy_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name ".ruff_cache" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name "htmlcov" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name "node_modules" -exec rm -rf {} + 2>/dev/null || true
-	find . -type d -name "dist" -exec rm -rf {} + 2>/dev/null || true
-	find . -type f -name ".coverage" -delete 2>/dev/null || true
-	find . -type f -name "*.pyc" -delete 2>/dev/null || true
-	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
-	@echo "Clean completed!"
+	@echo "清理容器..."
+	docker-compose down -v
+
+# 完全清理（包括数据）
+clean-all: clean
+	@echo "清理数据卷..."
+	docker volume rm outdoor_mongodb_data outdoor_mongodb_config outdoor_mysql_data 2>/dev/null || true
+
+# ============================================
+# Install Commands
+# ============================================
+
+install:
+	@echo "安装 Python 依赖 (本地)..."
+	cd backend && pip install -r requirements.txt

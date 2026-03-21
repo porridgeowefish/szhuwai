@@ -48,6 +48,29 @@ from .output import (
     GridPointWeather,
     ScenicSpot
 )
+from .user import (
+    UserBase,
+    UserCreate,
+    UserResponse,
+    UserInDB
+)
+from .sms import (
+    SmsScene,
+    SmsSendRequest,
+    SmsSendResponse,
+    SmsVerifyRequest
+)
+from .auth import (
+    UsernameRegisterRequest,
+    UsernameLoginRequest,
+    PhoneRegisterRequest,
+    PhoneLoginRequest,
+    ResetPasswordRequest,
+    BindPhoneRequest,
+    ChangePasswordRequest,
+    TokenResponse
+)
+from .quota import QuotaInfo, QuotaResponse
 
 __all__ = [
     # Base models
@@ -98,5 +121,31 @@ __all__ = [
     "SafetyIssueType",
     "SafetyIssue",
     "GridPointWeather",
-    "ScenicSpot"
+    "ScenicSpot",
+
+    # User models
+    "UserBase",
+    "UserCreate",
+    "UserResponse",
+    "UserInDB",
+
+    # SMS models
+    "SmsScene",
+    "SmsSendRequest",
+    "SmsSendResponse",
+    "SmsVerifyRequest",
+
+    # Auth models
+    "UsernameRegisterRequest",
+    "UsernameLoginRequest",
+    "PhoneRegisterRequest",
+    "PhoneLoginRequest",
+    "ResetPasswordRequest",
+    "BindPhoneRequest",
+    "ChangePasswordRequest",
+    "TokenResponse",
+
+    # Quota models
+    "QuotaInfo",
+    "QuotaResponse",
 ]

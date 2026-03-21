@@ -164,6 +164,62 @@ class APIConfig(BaseModel):
         description="Token 有效期（秒）"
     )
 
+    # 阿里云短信配置
+    ALIYUN_ACCESS_KEY_ID: str = Field(
+        default="",
+        description="阿里云 AccessKey ID"
+    )
+    ALIYUN_ACCESS_KEY_SECRET: str = Field(
+        default="",
+        description="阿里云 AccessKey Secret"
+    )
+    SMS_SIGN_NAME: str = Field(
+        default="户外规划助手",
+        description="短信签名"
+    )
+    SMS_TEMPLATE_REGISTER: str = Field(
+        default="",
+        description="注册短信模板 ID"
+    )
+    SMS_TEMPLATE_LOGIN: str = Field(
+        default="",
+        description="登录短信模板 ID"
+    )
+    SMS_TEMPLATE_BIND: str = Field(
+        default="",
+        description="绑定手机短信模板 ID"
+    )
+    SMS_TEMPLATE_UNBIND: str = Field(
+        default="",
+        description="解绑手机短信模板 ID"
+    )
+    SMS_TEMPLATE_RESET_PASSWORD: str = Field(
+        default="",
+        description="重置密码短信模板 ID"
+    )
+    # 短信业务配置
+    SMS_CODE_LENGTH: int = Field(
+        default=6,
+        ge=4,
+        le=8,
+        description="验证码长度"
+    )
+    SMS_EXPIRE_SECONDS: int = Field(
+        default=300,  # 5分钟
+        ge=60,
+        description="验证码有效期（秒）"
+    )
+    SMS_COOLDOWN_SECONDS: int = Field(
+        default=60,  # 60秒
+        ge=10,
+        description="发送冷却时间（秒）"
+    )
+    SMS_DAILY_LIMIT: int = Field(
+        default=10,
+        ge=1,
+        description="每日发送上限"
+    )
+
     @field_validator(
         'TIMEOUT', 'RETRY', 'RATE_LIMIT', 'CACHE_TTL', 'CACHE_MAX_SIZE',
         'MYSQL_POOL_SIZE', 'MONGO_PORT'
@@ -232,6 +288,15 @@ class APIConfig(BaseModel):
             "MONGO_USER": "MONGO_USER",
             "MONGO_PASSWORD": "MONGO_PASSWORD",
             "MONGO_DATABASE": "MONGO_DATABASE",
+            # 阿里云短信环境变量
+            "ALIYUN_ACCESS_KEY_ID": "ALIYUN_ACCESS_KEY_ID",
+            "ALIYUN_ACCESS_KEY_SECRET": "ALIYUN_ACCESS_KEY_SECRET",
+            "SMS_SIGN_NAME": "SMS_SIGN_NAME",
+            "SMS_TEMPLATE_REGISTER": "SMS_TEMPLATE_REGISTER",
+            "SMS_TEMPLATE_LOGIN": "SMS_TEMPLATE_LOGIN",
+            "SMS_TEMPLATE_BIND": "SMS_TEMPLATE_BIND",
+            "SMS_TEMPLATE_UNBIND": "SMS_TEMPLATE_UNBIND",
+            "SMS_TEMPLATE_RESET_PASSWORD": "SMS_TEMPLATE_RESET_PASSWORD",
         }
 
         for env_var, config_key in env_mapping.items():

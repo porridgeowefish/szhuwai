@@ -157,6 +157,25 @@ def get_mysql_client() -> MySQLClient:
     return mysql_client
 
 
+def get_db() -> Generator[Session, None, None]:
+    """获取数据库会话（FastAPI 依赖注入）
+
+    为 FastAPI 路由提供数据库会话的生成器函数。
+
+    Yields:
+        Session: SQLAlchemy 会话对象
+
+    Example:
+        >>> @app.get("/users")
+        ... def get_users(db: Session = Depends(get_db)):
+        ...     users = db.query(User).all()
+        ...     return users
+    """
+    client = get_mysql_client()
+    with client.get_session() as session:
+        yield session
+
+
 def init_mysql_client(config: APIConfig) -> MySQLClient:
     """初始化全局 MySQL 客户端
 

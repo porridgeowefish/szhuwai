@@ -1,24 +1,127 @@
+# ====================================
+# 户外活动规划助手 - Docker Compose 配置
+# ====================================
+# 本地和云端统一部署方式：
+#   docker-compose up -d
+# ====================================
+
 services:
+  # ====================================
+  # MySQL 数据库服务
+  # ====================================
+  mysql:
+    image: mysql:8.0
+    container_name: outdoor-mysql
+    restart: unless-stopped
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-123456}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-outdoor_planner}
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./scripts/init_mysql.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - outdoor-network
+    command: --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-123456}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ====================================
+  # MongoDB 数据库服务
+  # ====================================
+  mongodb:
+    image: mongo:8.0
+    container_name: outdoor-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-outdoor_planner}
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+      - ./scripts/setup_mongodb.js:/docker-entrypoint-initdb.d/setup.js:ro
+    networks:
+      - outdoor-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  # ====================================
+  # 后端服务
+  # ====================================
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: outdoor-backend
+    restart: unless-stopped
     ports:
       - "8000:8000"
-    env_file: .env
-    container_name: szhuwai-backend
+    env_file:
+      - .env
     environment:
-      - HTTP_PROXY=
-      - HTTPS_PROXY=
-      - http_proxy=
-      - https_proxy=
-      - PROXY_HTTP=
-      - PROXY_HTTPS=
+      # Docker 服务名作为数据库主机
+      MYSQL_HOST: mysql
+      MYSQL_PORT: 3306
+      MONGO_HOST: mongodb
+      MONGO_PORT: 27017
+      # 清除代理配置（Docker 内部访问不需要）
+      HTTP_PROXY: ""
+      HTTPS_PROXY: ""
+      http_proxy: ""
+      https_proxy: ""
+      PROXY_HTTP: ""
+      PROXY_HTTPS: ""
     volumes:
       - ./backend/temp_tracks:/app/temp_tracks
+    networks:
+      - outdoor-network
+    depends_on:
+      mysql:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
 
+  # ====================================
+  # 前端服务 (可选)
+  # ====================================
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: outdoor-frontend
+    restart: unless-stopped
     ports:
       - "80:80"
+    networks:
+      - outdoor-network
     depends_on:
       - backend
-    container_name: szhuwai-frontend
+    profiles:
+      - with-frontend
+
+# ====================================
+# 网络配置
+# ====================================
+networks:
+  outdoor-network:
+    driver: bridge
+    name: outdoor-network
+
+# ====================================
+# 数据卷配置
+# ====================================
+volumes:
+  mongodb_data:
+    name: outdoor_mongodb_data
+  mongodb_config:
+    name: outdoor_mongodb_config
+  mysql_data:
+    name: outdoor_mysql_data

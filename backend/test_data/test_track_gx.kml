@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2" xmlns:gx="http://www.google.com/kml/ext/2.2">
+  <Document>
+    <name>大爬升大下降测试轨迹（gx:Track格式）</name>
+    <Placemark>
+      <gx:Track>
+        <!-- 起点：海拔 500m -->
+        <gx:coord>116.4074 39.9042 500.0</gx:coord>
+
+        <!-- 小幅爬升：500m -> 600m (100m爬升) -->
+        <gx:coord>116.4080 39.9050 550.0</gx:coord>
+        <gx:coord>116.4085 39.9055 600.0</gx:coord>
+
+        <!-- 小幅下降：600m -> 580m (20m下降) -->
+        <gx:coord>116.4090 39.9060 590.0</gx:coord>
+        <gx:coord>116.4095 39.9065 580.0</gx:coord>
+
+        <!-- 大爬升段：580m -> 1200m (620m爬升，超过300m阈值) -->
+        <gx:coord>116.4100 39.9070 700.0</gx:coord>
+        <gx:coord>116.4105 39.9075 850.0</gx:coord>
+        <gx:coord>116.4110 39.9080 1000.0</gx:coord>
+        <gx:coord>116.4115 39.9085 1100.0</gx:coord>
+        <gx:coord>116.4120 39.9090 1150.0</gx:coord>
+        <gx:coord>116.4125 39.9095 1180.0</gx:coord>
+        <gx:coord>116.4130 39.9100 1200.0</gx:coord>
+
+        <!-- 小幅下降：1200m -> 1160m (40m下降，不超过50m阈值) -->
+        <gx:coord>116.4135 39.9105 1180.0</gx:coord>
+        <gx:coord>116.4140 39.9110 1160.0</gx:coord>
+
+        <!-- 继续爬升：1160m -> 1250m (90m爬升) -->
+        <gx:coord>116.4145 39.9115 1200.0</gx:coord>
+        <gx:coord>116.4150 39.9120 1250.0</gx:coord>
+
+        <!-- 大下降段：1250m -> 600m (650m下降，超过300m阈值) -->
+        <gx:coord>116.4155 39.9125 1100.0</gx:coord>
+        <gx:coord>116.4160 39.9130 950.0</gx:coord>
+        <gx:coord>116.4165 39.9135 800.0</gx:coord>
+        <gx:coord>116.4170 39.9140 700.0</gx:coord>
+        <gx:coord>116.4175 39.9145 650.0</gx:coord>
+        <gx:coord>116.4180 39.9150 600.0</gx:coord>
+
+        <!-- 小幅上升：600m -> 630m (30m上升，不超过50m阈值) -->
+        <gx:coord>116.4185 39.9155 615.0</gx:coord>
+        <gx:coord>116.4190 39.9160 630.0</gx:coord>
+
+        <!-- 继续下降：630m -> 400m (230m下降) -->
+        <gx:coord>116.4195 39.9165 550.0</gx:coord>
+        <gx:coord>116.4200 39.9170 450.0</gx:coord>
+        <gx:coord>116.4205 39.9175 400.0</gx:coord>
+
+        <!-- 终点：海拔 400m -->
+        <gx:coord>116.4210 39.9180 400.0</gx:coord>
+      </gx:Track>
+    </Placemark>
+  </Document>
+</kml>

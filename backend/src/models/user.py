@@ -6,11 +6,15 @@
 """
 
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, String, func
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.infrastructure.mysql_client import Base
+
+if TYPE_CHECKING:
+    from src.models.quota_usage import QuotaUsage
 
 
 class User(Base):
@@ -43,6 +47,11 @@ class User(Base):
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    # 关联
+    quota_usages: Mapped[list["QuotaUsage"]] = relationship(
+        back_populates="user", cascade="all, delete-orphan"
+    )
 
     def __repr__(self) -> str:
         return f"User(id={self.id}, username={self.username}, phone={self.phone})"
