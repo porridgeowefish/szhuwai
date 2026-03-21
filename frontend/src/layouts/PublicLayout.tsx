@@ -1,8 +1,17 @@
 import React from 'react';
-import { Outlet, Link } from 'react-router-dom';
-import { Tent } from 'lucide-react';
+import { Outlet, Link, useNavigate } from 'react-router-dom';
+import { Tent, User, LogOut } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext';
 
 const PublicLayout: React.FC = () => {
+  const { user, isAuthenticated, logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
   return (
     <div className="min-h-screen bg-[var(--sand)]">
       {/* 顶部栏 */}
@@ -17,18 +26,57 @@ const PublicLayout: React.FC = () => {
             </span>
           </Link>
           <nav className="flex items-center gap-4">
-            <Link
-              to="/auth/login"
-              className="text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
-            >
-              登录
-            </Link>
-            <Link
-              to="/auth/register"
-              className="btn-forest px-4 py-2 rounded-lg text-white text-sm font-bold"
-            >
-              注册
-            </Link>
+            {isAuthenticated ? (
+              <>
+                <Link
+                  to="/reports"
+                  className="text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
+                >
+                  报告中心
+                </Link>
+                {user?.role === 'admin' && (
+                  <Link
+                    to="/admin/users"
+                    className="text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
+                  >
+                    用户管理
+                  </Link>
+                )}
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full bg-[var(--forest)] flex items-center justify-center text-white text-sm font-bold">
+                    {user?.username?.charAt(0).toUpperCase()}
+                  </div>
+                  <Link
+                    to="/profile"
+                    className="text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
+                  >
+                    {user?.username}
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors flex items-center gap-1"
+                  >
+                    <LogOut size={14} />
+                    退出
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <Link
+                  to="/auth/login"
+                  className="text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
+                >
+                  登录
+                </Link>
+                <Link
+                  to="/auth/register"
+                  className="btn-forest px-4 py-2 rounded-lg text-white text-sm font-bold"
+                >
+                  注册
+                </Link>
+              </>
+            )}
           </nav>
         </div>
       </header>

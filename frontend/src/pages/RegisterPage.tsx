@@ -54,13 +54,13 @@ const RegisterPage: React.FC = () => {
 
     try {
       if (registerType === 'username') {
-        await authAPI.register({ username: formData.username, password: formData.password });
-        // 注册成功后自动登录
-        await login({ username: formData.username, password: formData.password });
+        const registerResult: any = await authAPI.register({ username: formData.username, password: formData.password });
+        // 注册成功后使用返回的 token 直接登录
+        await login({ username: formData.username, password: formData.password, _token: registerResult.accessToken });
       } else {
-        await authAPI.registerWithPhone({ phone: formData.phone, code: formData.code });
-        // 手机号注册后需要设置密码或直接登录
-        await login({ phone: formData.phone, code: formData.code });
+        const registerResult: any = await authAPI.registerWithPhone({ phone: formData.phone, code: formData.code });
+        // 手机号注册后使用返回的 token 直接登录
+        await login({ phone: formData.phone, code: formData.code, _token: registerResult.accessToken });
       }
       navigate('/', { replace: true });
     } catch (err: any) {

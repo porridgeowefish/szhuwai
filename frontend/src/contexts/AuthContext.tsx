@@ -6,7 +6,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   user: User | null;
   token: string | null;
-  login: (credentials: LoginRequest) => Promise<void>;
+  login: (credentials: LoginRequest & { _token?: string }) => Promise<void>;
   logout: () => void;
   updateUser: () => Promise<void>;
 }
@@ -36,7 +36,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setIsInitialized(true);
   }, []);
 
-  const login = useCallback(async (credentials: LoginRequest) => {
+  const login = useCallback(async (credentials: LoginRequest & { _token?: string }) => {
+    // 如果已提供 token（注册后直接登录），直接使用
+    if (credentials._token) {
+      // 获取用户信息
+      const tempToken = credentials._token;
+      localStorage.setItem('access_token', tempToken);
+
+      const response = await authAPI.getCurrentUser();
+      const userData = response.data;
+
+      setToken(tempToken);
+      setUser(userData);
+      localStorage.setItem('user', JSON.stringify(userData));
+      return;
+    }
+
+    // 否则调用登录 API
     const response = await (credentials.username
       ? authAPI.login({ username: credentials.username, password: credentials.password })
       : authAPI.loginWithPhone({ phone: credentials.phone, code: credentials.code })) as any;

@@ -20,6 +20,7 @@ const TrackAnalysisPage = React.lazy(() => import('./pages/TrackAnalysisPage'));
 const WeatherQueryPage = React.lazy(() => import('./pages/WeatherQueryPage'));
 const TransportPage = React.lazy(() => import('./pages/TransportPage'));
 const SearchPage = React.lazy(() => import('./pages/SearchPage'));
+const UserManagementPage = React.lazy(() => import('./pages/UserManagementPage'));
 
 const App: React.FC = () => {
   return (
@@ -51,6 +52,7 @@ const App: React.FC = () => {
                 <Route path="/tools/weather" element={<WeatherQueryPage />} />
                 <Route path="/tools/transport" element={<TransportPage />} />
                 <Route path="/tools/search" element={<SearchPage />} />
+                <Route path="/admin/users" element={<UserManagementPage />} />
               </Route>
 
               {/* 404 重定向 */}
