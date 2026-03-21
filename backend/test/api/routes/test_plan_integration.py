@@ -15,6 +15,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.mark.api
 class TestGeneratePlanIntegration:
     """generate-plan 集成测试"""
 
@@ -23,7 +24,7 @@ class TestGeneratePlanIntegration:
         """Mock 户外规划器"""
         mock_planner = mocker.MagicMock()
         mock_planner.execute_planning.return_value = _create_mock_plan()
-        mocker.patch("src.domain.orchestrator.OutdoorPlannerRouter", return_value=mock_planner)
+        mocker.patch("src.api.routes.plan.OutdoorPlannerRouter", return_value=mock_planner)
         return mock_planner
 
     @pytest.fixture

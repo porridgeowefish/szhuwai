@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS users (
     role ENUM('user', 'admin') DEFAULT 'user' COMMENT '角色',
     status ENUM('active', 'disabled') DEFAULT 'active' COMMENT '状态',
     last_login_at DATETIME COMMENT '最后登录时间',
+    deleted_at DATETIME NULL COMMENT '删除时间（软删除）',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     INDEX idx_username (username),
@@ -52,6 +53,7 @@ CREATE TABLE IF NOT EXISTS sms_codes (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='短信验证码表';
 
 -- 创建默认管理员账户 (密码: admin123，请在生产环境中修改)
--- 密码哈希由 Python PasswordHasher 生成，这里使用占位符
--- INSERT INTO users (username, password_hash, role, status) VALUES
--- ('admin', '$2b$12$placeholder_hash', 'admin', 'active');
+-- 密码哈希: bcrypt(12) for 'admin123'
+INSERT INTO users (username, password_hash, role, status) VALUES
+('admin', '$2b$12$F0rNR/juCcpMngLl6RB4Weo1u8jdBT8r/guxx2FNixF1DbxCT/DCK', 'admin', 'active')
+ON DUPLICATE KEY UPDATE role = 'admin';
