@@ -6,7 +6,6 @@ This module provides pytest configuration and shared fixtures for all tests.
 """
 
 import pytest
-import os
 import sys
 from pathlib import Path
 

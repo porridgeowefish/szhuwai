@@ -5,7 +5,7 @@
 封装交通路线规划逻辑。
 """
 
-from typing import List, Optional
+from typing import List
 
 from loguru import logger
 

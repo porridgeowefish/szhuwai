@@ -6,7 +6,7 @@ End-to-end tests for the Outdoor Agent Planner workflow.
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from src.api.config import APIConfig
 from src.api.weather_client import WeatherClient
 from src.api.map_client import MapClient

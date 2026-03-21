@@ -17,9 +17,7 @@ Test Structure:
 """
 
 import pytest
-import os
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime
+from unittest.mock import patch, MagicMock
 
 # Import API clients and utilities
 from src.api.config import APIConfig
@@ -32,15 +30,12 @@ from src.api.utils import (
     APIError,
     RateLimitError,
     AuthenticationError,
-    NetworkError,
-    NotFoundError,
-    TimeoutError
+    NotFoundError
 )
 
 # Import schemas for response validation
-from src.schemas.weather import WeatherDaily, WeatherSummary
 from src.schemas.transport import GeocodeResult, DrivingRoute
-from src.schemas.search import SearchResult, WebSearchResponse
+from src.schemas.search import WebSearchResponse
 
 
 class TestAPIConfig:

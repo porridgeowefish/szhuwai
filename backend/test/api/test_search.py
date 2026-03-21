@@ -5,11 +5,9 @@ Search API Tests
 Tests for the SearchClient (Tavily) integration.
 """
 
-import pytest
 from unittest.mock import MagicMock, patch
 from src.api.config import APIConfig
 from src.api.search_client import SearchClient
-from src.schemas.search import SearchResult, WebSearchResponse
 
 
 class TestSearchClient:

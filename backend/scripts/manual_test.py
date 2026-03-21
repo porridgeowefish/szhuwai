@@ -6,7 +6,6 @@
 
 import sys
 import requests
-import os
 sys.path.append('..')
 
 # 直接读取.env文件获取API密钥

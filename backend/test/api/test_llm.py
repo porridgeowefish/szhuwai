@@ -15,7 +15,7 @@ import sys
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.api.config import api_config
+from src.api.config import api_config  # noqa: E402
 
 
 class TestLLMAPI:
@@ -183,7 +183,7 @@ class TestLLMAPI:
         # 验证返回内容是有效的 JSON
         try:
             parsed = json.loads(content)
-            print(f"\n[OK] 规划 JSON 解析成功:")
+            print("\n[OK] 规划 JSON 解析成功:")
             print(f"   - plan_name: {parsed.get('plan_name', 'N/A')}")
             print(f"   - overall_rating: {parsed.get('overall_rating', 'N/A')}")
             print(f"   - track_overview: {parsed.get('track_overview', 'N/A')}")

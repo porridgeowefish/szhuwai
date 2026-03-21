@@ -5,21 +5,18 @@ Usage Example
 Comprehensive example of how to use the Outdoor Agent Planner schemas and API clients.
 """
 
-import os
 import logging
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List
 
 # Import schemas
 from src.schemas.base import Point3D
 from src.schemas.track import TrackAnalysisResult, TerrainChange
 from src.schemas.weather import (
-    WeatherSummary, WeatherDaily, WeatherSummaryInfo,
-    CityWeatherDaily, GridWeatherDaily, HourlyWeather,
-    CityWeatherResponse, GridWeatherResponse, HourlyWeatherResponse
+    WeatherSummary, WeatherDaily, WeatherSummaryInfo
 )
-from src.schemas.transport import TransportRoutes, DrivingRoute, GeocodeResult, LocationInfo, RouteSummary
-from src.schemas.search import SearchResult, WebSearchResponse
+from src.schemas.transport import TransportRoutes, LocationInfo, RouteSummary
+from src.schemas.search import WebSearchResponse
 from src.schemas.output import (
     OutdoorActivityPlan, EquipmentItem, SafetyIssue,
     SafetyAssessment, EmergencyRescueContact, ItineraryItem
@@ -102,7 +99,7 @@ def create_sample_track_analysis() -> TrackAnalysisResult:
 def create_sample_weather() -> WeatherSummary:
     """Create sample weather data"""
     # Create sample daily weather
-    daily_weather = [
+    [
         WeatherDaily(
             fxDate=(datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"),
             tempMax=22,
@@ -156,7 +153,6 @@ def create_sample_transport() -> TransportRoutes:
     """Create sample transport data"""
     # Get geocoding for locations
     from api import MapClient, APIConfig
-    from src.schemas.transport import LocationInfo, RouteSummary
 
     map_client = MapClient(APIConfig.from_env())
 
@@ -469,10 +465,10 @@ def main():
 
         # Create sample data
         logger.info("Creating sample data...")
-        track = create_sample_track_analysis()
-        weather = create_sample_weather()
-        transport = create_sample_transport()
-        search_results = create_sample_search()
+        create_sample_track_analysis()
+        create_sample_weather()
+        create_sample_transport()
+        create_sample_search()
 
         logger.info("Sample data created successfully")
 

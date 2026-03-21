@@ -9,7 +9,6 @@ import pytest
 from datetime import datetime
 
 from src.domain.orchestrator import OutdoorPlannerRouter
-from src.schemas.output import OutdoorActivityPlan
 
 
 class TestOutdoorPlannerRouter:

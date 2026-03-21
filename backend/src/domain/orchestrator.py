@@ -15,9 +15,6 @@ from src.schemas.base import Point3D
 from src.schemas.output import (
     OutdoorActivityPlan,
     PlanningContext,
-    TrackDetailAnalysis,
-    TerrainSegment,
-    ElevationPoint,
     CloudSeaAssessment
 )
 from src.schemas.weather import WeatherSummary

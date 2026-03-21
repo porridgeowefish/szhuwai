@@ -73,7 +73,7 @@ def test_weather_api():
         logger.info("\n--- Test 4: Location Coordinate Handling ---")
         try:
             location_params = weather_client.prepare_location_for_apis("Beijing")
-            logger.info(f"✓ Location parameters prepared")
+            logger.info("✓ Location parameters prepared")
             logger.info(f"  City API: {location_params['city_api']}")
             logger.info(f"  Grid API: {location_params['grid_api']}")
             logger.info(f"  Coordinates: {location_params['coords']}")
@@ -89,7 +89,7 @@ def test_weather_api():
                         city_forecast.daily[0],
                         grid_forecast.daily[0]
                     )
-                    logger.info(f"✓ Cloud sea probability calculated")
+                    logger.info("✓ Cloud sea probability calculated")
                     logger.info(f"  Probability: {cloud_sea['probability']}%")
                     logger.info(f"  Assessment: {cloud_sea['assessment']}")
         except Exception as e:
@@ -103,7 +103,7 @@ def test_weather_api():
                     city_forecast.daily,
                     grid_forecast.daily
                 )
-                logger.info(f"✓ Safety check completed")
+                logger.info("✓ Safety check completed")
                 logger.info(f"  Risk level: {safety['risk_level']}")
                 if safety['safety_issues']:
                     logger.info(f"  Issues: {len(safety['safety_issues'])}")

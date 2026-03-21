@@ -6,35 +6,33 @@
 """
 
 import sys
-import os
 from pathlib import Path
 
 # 添加项目根目录到 sys.path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-import time
 
 # 测试导入
 print("测试模块导入...")
 
 try:
-    from fastapi import FastAPI
-    from fastapi.middleware.cors import CORSMiddleware
+    from fastapi import FastAPI  # noqa: F401
+    from fastapi.middleware.cors import CORSMiddleware  # noqa: F401
     print("  - FastAPI: OK")
 except ImportError as e:
     print(f"  - FastAPI: FAILED - {e}")
     sys.exit(1)
 
 try:
-    from src.domain.orchestrator import OutdoorPlannerRouter
+    from src.domain.orchestrator import OutdoorPlannerRouter  # noqa: F401
     print("  - OutdoorPlannerRouter: OK")
 except ImportError as e:
     print(f"  - OutdoorPlannerRouter: FAILED - {e}")
     sys.exit(1)
 
 try:
-    from src.schemas.output import OutdoorActivityPlan
+    from src.schemas.output import OutdoorActivityPlan  # noqa: F401
     print("  - OutdoorActivityPlan: OK")
 except ImportError as e:
     print(f"  - OutdoorActivityPlan: FAILED - {e}")

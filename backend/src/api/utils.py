@@ -160,7 +160,7 @@ def handle_api_errors(func: Callable) -> Callable:
                 response_json = {}
                 try:
                     response_json = e.response.json()
-                except:
+                except (ValueError, KeyError):
                     response_json = {"raw_response": e.response.text[:1000]}  # 保留原始文本
 
                 if e.response.status_code == 429:

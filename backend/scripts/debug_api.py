@@ -114,7 +114,6 @@ def test_client_with_debug():
     from src.api.config import APIConfig
     from src.api.weather_client import WeatherClient
     from src.api.map_client import MapClient
-    from src.api.search_client import SearchClient
 
     # 配置日志
     logging.getLogger('src.api').setLevel(logging.DEBUG)

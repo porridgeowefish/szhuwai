@@ -43,7 +43,7 @@ def test_without_proxy():
         logger.info(f"天气API响应状态: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
-            logger.info(f"✓ 天气API成功")
+            logger.info("✓ 天气API成功")
             logger.info(f"   - 城市名: {data.get('location', {}).get('name', 'N/A')}")
             logger.info(f"   - 预报天数: {len(data.get('daily', []))}")
         else:
@@ -70,7 +70,7 @@ def test_without_proxy():
         if response.status_code == 200:
             data = response.json()
             if data.get('status') == '1':
-                logger.info(f"✓ 地图API成功")
+                logger.info("✓ 地图API成功")
                 logger.info(f"   - 结果数量: {len(data.get('geocodes', []))}")
                 if data.get('geocodes'):
                     location = data['geocodes'][0]
@@ -99,7 +99,7 @@ def test_without_proxy():
         logger.info(f"搜索API响应状态: {response.status_code}")
         if response.status_code == 200:
             data = response.json()
-            logger.info(f"✓ 搜索API成功")
+            logger.info("✓ 搜索API成功")
             logger.info(f"   - 结果数量: {len(data.get('results', []))}")
         else:
             logger.error(f"✗ 搜索API失败: {response.text}")
@@ -150,7 +150,7 @@ def test_clients_without_proxy():
         config = APIConfig.from_env('../.env')
         search = SearchClient(config)
         result = search.search("北京天气")
-        logger.info(f"✓ SearchClient成功")
+        logger.info("✓ SearchClient成功")
     except Exception as e:
         logger.error(f"✗ SearchClient失败: {e}")
 

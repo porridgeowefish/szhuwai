@@ -5,7 +5,6 @@
 展示 PlanningContext 和轻量化 OutdoorActivityPlan 的使用方法。
 """
 
-from datetime import datetime
 from src.schemas.output import OutdoorActivityPlan, EmergencyRescueContact
 from src.schemas.weather import CityWeatherDaily
 

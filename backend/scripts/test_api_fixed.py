@@ -66,8 +66,8 @@ def test_search_api():
         logger.info(f"搜索API配置 - Key: {config.SEARCH_API_KEY[:10] + '...' if config.SEARCH_API_KEY else 'Not set'}")
 
         search = SearchClient(config)
-        result = search.search("北京天气")
-        logger.info(f"✓ 搜索API成功")
+        search.search("北京天气")
+        logger.info("✓ 搜索API成功")
         return True
     except Exception as e:
         logger.error(f"✗ 搜索API失败: {e}")

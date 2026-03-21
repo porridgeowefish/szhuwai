@@ -5,7 +5,6 @@ API端点测试脚本
 """
 
 import sys
-import os
 sys.path.append('..')
 
 from src.api.config import APIConfig
@@ -56,7 +55,7 @@ def test_search_api():
         search = SearchClient(config)
 
         # 测试搜索
-        result = search.search("北京天气")
+        results = search.search("北京天气")
         logger.info(f"✓ 搜索API成功，返回了{len(results)}个结果")
         return True
     except Exception as e:

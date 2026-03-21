@@ -198,7 +198,7 @@ class MapClient(BaseAPIClient):
         try:
             lon, lat = location.split(",")
             lon, lat = float(lon), float(lat)
-        except (ValueError, AttributeError) as e:
+        except (ValueError, AttributeError):
             raise APIError(f"无效的坐标格式: {location}", 0, {})
 
         # 2. 坐标范围验证（中国境内GCJ02）
@@ -215,13 +215,11 @@ class MapClient(BaseAPIClient):
         }
 
         # 3. 带重试的请求
-        last_error = None
         for attempt in range(max_retries):
             try:
                 response = self._make_request("GET", endpoint, params=params)
                 break
             except APIError as e:
-                last_error = e
                 if attempt < max_retries - 1:
                     logger.warning(f"逆地理编码请求失败，第 {attempt + 1} 次重试: {str(e)}")
                     time.sleep(1 * (2 ** attempt))  # 指数退避

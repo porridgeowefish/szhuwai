@@ -95,7 +95,29 @@
       "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"from tests.manual.test_route_planning import RoutePlanner; print\\('OK route planning'\\)\")",
       "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"\nfrom tests.manual.test_route_planning import RoutePlanner\nplanner = RoutePlanner\\(\\)\nresult = planner.plan_route\\('beijing xizhan', 'beijing nanzhan', 'beijing'\\)\nprint\\('Found', len\\(result.get\\('transit_routes', []\\)\\), 'transit routes'\\)\nif result.get\\('driving_route'\\):\n    print\\('Driving route found'\\)\n\")",
       "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"\nfrom tests.manual.test_route_planning import RoutePlanner\nplanner = RoutePlanner\\(\\)\nresult = planner.plan_route\\('beijing xizhan', 'beijing nanzhan', 'beijing'\\)\nprint\\('Transit routes:', len\\(result.get\\('transit_routes', []\\)\\)\\)\nif result.get\\('driving_route'\\):\n    print\\('Driving route: OK'\\)\n\")",
-      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"\nfrom tests.manual.test_search_with_llm import SearchClient\nclient = SearchClient\\(\\)\nresult = client.search\\('outdoor hiking gear', max_results=3\\)\nprint\\('Search results:', len\\(result.results\\)\\)\nfor r in result.results[:2]:\n    print\\('-', r.title[:50] if len\\(r.title\\) > 50 else r.title\\)\n\")"
+      "Bash(cd \"D:/2_Study/Outdoor-Agent-Planner/03_Code\" && C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"\nfrom tests.manual.test_search_with_llm import SearchClient\nclient = SearchClient\\(\\)\nresult = client.search\\('outdoor hiking gear', max_results=3\\)\nprint\\('Search results:', len\\(result.results\\)\\)\nfor r in result.results[:2]:\n    print\\('-', r.title[:50] if len\\(r.title\\) > 50 else r.title\\)\n\")",
+      "Bash(sshpass:*)",
+      "Bash(which sshpass:*)",
+      "Bash(ssh:*)",
+      "Bash(cd:*)",
+      "Bash(ping:*)",
+      "Bash(scp:*)",
+      "Bash(find . -name \"*.py\" -exec grep -l \"database\\\\|db\\\\|sqlite\\\\|SQLAlchemy\\\\|mongodb\" {})",
+      "Bash(ruff check:*)",
+      "Bash(npm run:*)",
+      "Bash(C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"from src.api.routes import track_router, weather_router, transport_router, search_router, plan_router; print\\(''Routes imported successfully''\\)\")",
+      "Bash(C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \":*)",
+      "Bash(C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -c \"import pytest; print\\(f''pytest: {pytest.__version__}''\\)\")",
+      "Bash(C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -m pytest test/ -v --tb=short)",
+      "Bash(C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe -m mypy src/services/track_parser.py --ignore-missing-imports)",
+      "Bash(pytest test/infrastructure/test_mysql_client.py -v)",
+      "Bash(python -m mypy src/infrastructure/mysql_client.py --strict)",
+      "Bash(python -m mypy src/infrastructure/mysql_client.py --strict --explicit-package-bases)",
+      "Bash(python -m mypy src/infrastructure/mysql_client.py --strict --explicit-package-bases --no-error-summary)",
+      "Bash(pytest test/ -v --ignore=test/check_real_kml.py --ignore=test/test_kml_parse.py -q)",
+      "Bash(pytest test/infrastructure/ test/schemas/ test/services/test_geo_coord_utils.py test/services/test_track_parser.py -v -q)",
+      "Bash(pytest test/infrastructure/ -v)",
+      "Bash(docker-compose ps:*)"
     ]
   }
 }

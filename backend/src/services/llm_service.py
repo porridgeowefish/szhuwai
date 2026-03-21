@@ -7,13 +7,11 @@ LLM 服务
 
 import json
 from datetime import datetime
-from typing import Optional
 
 import requests
 from loguru import logger
 
 from src.schemas.output import OutdoorActivityPlan, PlanningContext
-from src.schemas.track import TrackAnalysisResult
 from src.api.config import api_config
 from src.prompts import get_system_prompt, get_user_prompt
 

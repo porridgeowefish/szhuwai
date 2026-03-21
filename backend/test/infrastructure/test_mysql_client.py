@@ -6,14 +6,13 @@ MySQL 客户端测试
 """
 
 import pytest
-from unittest.mock import patch, MagicMock, PropertyMock
+from unittest.mock import patch, MagicMock
 from sqlalchemy.exc import SQLAlchemyError
 
 from src.api.config import APIConfig
 from src.infrastructure.mysql_client import (
     MySQLClient,
     Base,
-    mysql_client,
     get_mysql_client,
     init_mysql_client,
 )

@@ -8,11 +8,11 @@ Client for integrating with Tavily Search API.
 import logging
 from typing import Dict, Optional, List
 
-logger = logging.getLogger(__name__)
-
 from . import BaseAPIClient, handle_api_errors
 from .config import api_config
 from src.schemas.search import SearchResult, WebSearchResponse
+
+logger = logging.getLogger(__name__)
 
 
 class SearchClient(BaseAPIClient):
@@ -235,7 +235,7 @@ class SearchClient(BaseAPIClient):
             import requests
             response = requests.head(url, timeout=5, allow_redirects=True)
             return response.status_code == 200
-        except:
+        except Exception:
             return False
 
     def crawl_page(self, url: str, max_length: int = 2000) -> Optional[str]:
@@ -286,10 +286,6 @@ class SearchClient(BaseAPIClient):
         ]
 
         # 使用百度和抖音作为搜索引擎
-        search_domains = [
-            "www.baidu.com",
-            "www.douyin.com"
-        ]
 
         for query in queries:
             # 搜索结果中提取电话号码
