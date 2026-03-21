@@ -95,7 +95,40 @@ class APIConfig(BaseModel):
         description="LLM API 超时时间（秒）"
     )
 
-    @field_validator('TIMEOUT', 'RETRY', 'RATE_LIMIT', 'CACHE_TTL', 'CACHE_MAX_SIZE')
+    # MySQL 配置
+    MYSQL_HOST: str = Field(
+        default="localhost",
+        description="MySQL 主机"
+    )
+    MYSQL_PORT: int = Field(
+        default=3306,
+        ge=1,
+        le=65535,
+        description="MySQL 端口"
+    )
+    MYSQL_USER: str = Field(
+        default="root",
+        description="MySQL 用户名"
+    )
+    MYSQL_PASSWORD: str = Field(
+        default="",
+        description="MySQL 密码"
+    )
+    MYSQL_DATABASE: str = Field(
+        default="outdoor_planner",
+        description="数据库名"
+    )
+    MYSQL_POOL_SIZE: int = Field(
+        default=5,
+        ge=1,
+        le=100,
+        description="连接池大小"
+    )
+
+    @field_validator(
+        'TIMEOUT', 'RETRY', 'RATE_LIMIT', 'CACHE_TTL', 'CACHE_MAX_SIZE',
+        'MYSQL_POOL_SIZE'
+    )
     @classmethod
     def validate_positive_numbers(cls, v: int) -> int:
         """验证数值必须为正数"""
@@ -146,7 +179,14 @@ class APIConfig(BaseModel):
             "AMAP_API_KEY": "MAP_API_KEY",
             "LLM_API_KEY": "LLM_API_KEY",
             "TAVILY_API_KEY": "SEARCH_API_KEY",
-            "WEATHER_DEVELOPER_HOST": "WEATHER_DEVELOPER_HOST"
+            "WEATHER_DEVELOPER_HOST": "WEATHER_DEVELOPER_HOST",
+            # MySQL 环境变量
+            "MYSQL_HOST": "MYSQL_HOST",
+            "MYSQL_PORT": "MYSQL_PORT",
+            "MYSQL_USER": "MYSQL_USER",
+            "MYSQL_PASSWORD": "MYSQL_PASSWORD",
+            "MYSQL_DATABASE": "MYSQL_DATABASE",
+            "MYSQL_POOL_SIZE": "MYSQL_POOL_SIZE",
         }
 
         for env_var, config_key in env_mapping.items():
