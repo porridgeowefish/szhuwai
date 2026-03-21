@@ -19,9 +19,6 @@ from src.schemas.weather import (
     WeatherCloudSeaAnalysis,
     WeatherSummary
 )
-from src.services.weather_analyzer import WeatherAnalyzer
-
-
 class WeatherClient(BaseAPIClient):
     """和风天气API客户端"""
 
@@ -34,8 +31,16 @@ class WeatherClient(BaseAPIClient):
             host = f"{host}.qweatherapi.com"
         self.base_url = f"https://{host}/v7"
         self.location_cache = {}
-        # 业务分析器（职责分离：Client 只负责数据获取）
-        self.analyzer = WeatherAnalyzer()
+        # 业务分析器（延迟导入避免循环依赖）
+        self._analyzer = None
+
+    @property
+    def analyzer(self):
+        """延迟加载 WeatherAnalyzer 避免循环导入"""
+        if self._analyzer is None:
+            from src.services.weather_analyzer import WeatherAnalyzer
+            self._analyzer = WeatherAnalyzer()
+        return self._analyzer
 
     def validate_response(self, response: Dict) -> bool:
         """验证API响应格式"""

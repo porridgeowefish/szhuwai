@@ -505,7 +505,7 @@ class TrackParser:
                     logger.info(f"[Gradient] Descent segment interrupted: elev_change={elev_change:.0f}m < {self.MIN_GRADIENT_THRESHOLD_M}m in 1km, current_descent={total_descent:.0f}m")
                     if total_descent > self.LARGE_DESCENT_THRESHOLD:
                         terrain_changes.append(TerrainChange(
-                            change_type="大下降",
+                            change_type="large_descent",
                             start_point=descent_start,
                             end_point=descent_valley,
                             elevation_diff=total_descent,
@@ -528,7 +528,7 @@ class TrackParser:
             logger.info(f"[Ascent] Final ascent segment: ascent={total_ascent}m, distance={ascent_distance_m}m, threshold={self.LARGE_ASCENT_THRESHOLD}m")
             if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
                 terrain_changes.append(TerrainChange(
-                    change_type="大爬升",
+                    change_type="large_ascent",
                     start_point=ascent_start,
                     end_point=ascent_peak,
                     elevation_diff=total_ascent,
@@ -540,7 +540,7 @@ class TrackParser:
             total_descent = descent_start.elevation - descent_valley.elevation
             if total_descent > self.LARGE_DESCENT_THRESHOLD:
                 terrain_changes.append(TerrainChange(
-                    change_type="大下降",
+                    change_type="large_descent",
                     start_point=descent_start,
                     end_point=descent_valley,
                     elevation_diff=total_descent,

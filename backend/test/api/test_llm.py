@@ -118,6 +118,7 @@ class TestLLMAPI:
         except json.JSONDecodeError as e:
             pytest.fail(f"返回内容不是有效的 JSON: {content[:200]}, 错误: {e}")
 
+    @pytest.mark.api
     def test_system_prompt_context(self):
         """测试系统提示词 + 用户上下文的请求模式"""
         from src.prompts import get_system_prompt

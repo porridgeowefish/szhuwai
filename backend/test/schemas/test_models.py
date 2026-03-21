@@ -54,7 +54,7 @@ class TestTerrainChange:
         end = Point3D(lat=39.91, lon=116.41, elevation=300)
 
         terrain = TerrainChange(
-            change_type="大爬升",
+            change_type="large_ascent",
             start_point=start,
             end_point=end,
             elevation_diff=200,

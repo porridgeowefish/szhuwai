@@ -160,14 +160,14 @@ class TestTrackParser:
         # 创建包含大爬升（>200m）的 GPX 文件
         gpx_file = data_dir / "large_ascent.gpx"
         gpx_content = self._create_gpx_with_elevation_profile(
-            [100, 150, 200, 300, 320, 330, 340]  # 累计爬升 > 200m
+            [100, 200, 300, 400, 500]  # 累计爬升 > 300m (threshold)
         )
         gpx_file.write_text(gpx_content, encoding='utf-8')
 
         result = parser.parse_file(gpx_file)
 
         # 应该识别出至少一个大爬升段
-        large_ascents = [t for t in result.terrain_analysis if t.change_type == "大爬升"]
+        large_ascents = [t for t in result.terrain_analysis if t.change_type == "large_ascent"]
         assert len(large_ascents) >= 1
         # 爬升量应大于 200m
         assert large_ascents[0].elevation_diff >= 200
@@ -184,7 +184,7 @@ class TestTrackParser:
         result = parser.parse_file(gpx_file)
 
         # 应该识别出大下降段
-        large_descents = [t for t in result.terrain_analysis if t.change_type == "大下降"]
+        large_descents = [t for t in result.terrain_analysis if t.change_type == "large_descent"]
         assert len(large_descents) >= 1
         # 下降量应大于 300m
         assert large_descents[0].elevation_diff >= 300
