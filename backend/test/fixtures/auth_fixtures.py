@@ -5,7 +5,6 @@
 提供认证相关的测试数据生成器。
 """
 
-from datetime import datetime, timezone
 
 
 def generate_user_data(

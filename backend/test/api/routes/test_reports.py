@@ -6,7 +6,6 @@
 当前测试仅验证 API 文档和路由注册。
 """
 
-import pytest
 from bson import ObjectId
 from fastapi.testclient import TestClient
 

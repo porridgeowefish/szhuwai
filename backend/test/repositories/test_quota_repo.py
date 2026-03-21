@@ -259,7 +259,6 @@ class TestQuotaRepositoryDateIsolation:
     def test_check_quota_by_date(self, quota_repo: QuotaRepository, test_user: User) -> None:
         """测试按日期检查额度"""
         yesterday = date.today() - timedelta(days=1)
-        today = date.today()
 
         # 昨天用完额度
         quota_repo.get_or_create(test_user.id, yesterday)

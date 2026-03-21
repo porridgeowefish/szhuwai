@@ -15,7 +15,6 @@
 """
 
 import time
-from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -181,7 +180,6 @@ class TestFullFlow:
 
     def test_full_user_journey(self, client: TestClient, tmp_path):
         """测试完整的用户旅程：注册 → 登录 → 查额度 → 生成计划 → 查报告"""
-        import time
         timestamp = int(time.time() * 1000)
         username = f"journey{timestamp}"
         password = "Journey@123456"
@@ -513,11 +511,11 @@ class TestUserIsolation:
     def test_user_isolation(self, client: TestClient, create_test_user, tmp_path):
         """测试用户数据隔离：用户无法查看/删除他人报告"""
         # 创建用户 A
-        user_a = create_test_user(username="usera", password="UserA@123")
+        _ = create_test_user(username="usera", password="UserA@123")
         headers_a = _get_auth_headers(client, "usera", "UserA@123")
 
         # 创建用户 B
-        user_b = create_test_user(username="userb", password="UserB@123")
+        _ = create_test_user(username="userb", password="UserB@123")
         headers_b = _get_auth_headers(client, "userb", "UserB@123")
 
         # 用户 A 生成报告
@@ -628,7 +626,7 @@ class TestErrorScenarios:
 
         # Mock JWT 验证返回过期错误
         from src.infrastructure import jwt_handler
-        original_verify = jwt_handler.jwt_handler.verify_token if hasattr(jwt_handler, 'jwt_handler') else None
+        jwt_handler.jwt_handler.verify_token if hasattr(jwt_handler, 'jwt_handler') else None
 
         def mock_verify(token_str):
             raise Exception("Token expired")
@@ -642,7 +640,7 @@ class TestErrorScenarios:
 
     def test_disabled_user(self, client: TestClient, create_test_user):
         """测试已禁用用户"""
-        user = create_test_user(username="disableduser", password="Test@123", status="disabled")
+        _ = create_test_user(username="disableduser", password="Test@123", status="disabled")
 
         response = client.post("/api/v1/auth/login", json={
             "username": "disableduser",

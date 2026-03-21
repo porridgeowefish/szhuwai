@@ -3,7 +3,6 @@
 ===================
 """
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -13,7 +12,7 @@ class TestUsersRoutes:
     def test_list_users_as_admin(self, client: TestClient, create_test_user):
         """测试管理员获取用户列表"""
         # 创建管理员用户
-        admin = create_test_user(username="admin", password="admin123", role="admin")
+        _ = create_test_user(username="admin", password="admin123", role="admin")
 
         # 创建一些普通用户
         create_test_user(username="user1", password="pass123")
@@ -46,7 +45,7 @@ class TestUsersRoutes:
     def test_list_users_as_normal_user(self, client: TestClient, create_test_user):
         """测试普通用户获取用户列表（应失败）"""
         # 创建普通用户
-        user = create_test_user(username="normaluser", password="pass123", role="user")
+        _ = create_test_user(username="normaluser", password="pass123", role="user")
 
         # 登录
         response = client.post("/api/v1/auth/login", json={
@@ -68,7 +67,7 @@ class TestUsersRoutes:
     def test_update_status_success(self, client: TestClient, create_test_user):
         """测试更新用户状态成功"""
         # 创建管理员
-        admin = create_test_user(username="admin", password="admin123", role="admin")
+        _ = create_test_user(username="admin", password="admin123", role="admin")
 
         # 创建普通用户
         target_user = create_test_user(username="targetuser", password="pass123", status="active")
@@ -118,7 +117,7 @@ class TestUsersRoutes:
     def test_update_status_invalid_status(self, client: TestClient, create_test_user):
         """测试无效状态值"""
         # 创建管理员
-        admin = create_test_user(username="admin", password="admin123", role="admin")
+        _ = create_test_user(username="admin", password="admin123", role="admin")
 
         # 创建普通用户
         target_user = create_test_user(username="targetuser", password="pass123")
@@ -141,7 +140,7 @@ class TestUsersRoutes:
     def test_update_status_user_not_found(self, client: TestClient, create_test_user):
         """测试更新不存在的用户"""
         # 创建管理员
-        admin = create_test_user(username="admin", password="admin123", role="admin")
+        _ = create_test_user(username="admin", password="admin123", role="admin")
 
         # 管理员登录
         response = client.post("/api/v1/auth/login", json={

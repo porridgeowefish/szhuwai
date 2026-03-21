@@ -3,9 +3,7 @@
 ================
 """
 
-from datetime import datetime
 
-import pytest
 from fastapi.testclient import TestClient
 
 
@@ -15,7 +13,7 @@ class TestQuotaRoutes:
     def test_get_quota_normal_user(self, client: TestClient, create_test_user):
         """测试普通用户获取额度"""
         # 创建普通用户
-        user = create_test_user(username="normaluser", password="pass123", role="user")
+        _ = create_test_user(username="normaluser", password="pass123", role="user")
 
         # 登录获取 token
         response = client.post("/api/v1/auth/login", json={
@@ -47,7 +45,7 @@ class TestQuotaRoutes:
     def test_get_quota_admin_user(self, client: TestClient, create_test_user):
         """测试管理员获取额度（无限制）"""
         # 创建管理员用户
-        admin = create_test_user(username="admin", password="admin123", role="admin")
+        _ = create_test_user(username="admin", password="admin123", role="admin")
 
         # 登录获取 token
         response = client.post("/api/v1/auth/login", json={

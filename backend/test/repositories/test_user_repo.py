@@ -207,7 +207,6 @@ class TestUserRepositoryDelete:
         assert not_found is None
 
         # 直接查询数据库验证 deleted_at 已设置
-        from src.models.user import User
         deleted_user = user_repo.session.query(User).filter(User.id == user.id).first()
         assert deleted_user is not None
         assert deleted_user.deleted_at is not None

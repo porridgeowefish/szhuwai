@@ -5,10 +5,9 @@ Pytest Configuration and Fixtures
 This module provides pytest configuration and shared fixtures for all tests.
 """
 
-import time
 from datetime import datetime, timedelta, timezone
 from typing import Generator
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -76,7 +75,7 @@ def _get_test_db():
 
 
 # 在导入任何模块之前设置 mock
-import src.infrastructure.mysql_client as mysql_module
+import src.infrastructure.mysql_client as mysql_module  # noqa: E402
 _original_get_db = mysql_module.get_db
 mysql_module.get_db = _get_test_db
 
@@ -476,7 +475,7 @@ def auth_headers(client: TestClient, test_user_data: dict) -> dict:
 def admin_headers(client: TestClient, create_test_user) -> dict:
     """管理员认证请求头"""
     # 创建管理员用户
-    admin = create_test_user(
+    _ = create_test_user(
         username="admin",
         password="admin123",
         role="admin",

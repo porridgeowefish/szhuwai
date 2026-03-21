@@ -9,7 +9,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 from src.infrastructure.mysql_client import Base
-from src.models.sms_code import SmsCode
 from src.models.sms_send_log import SmsSendLog
 from src.repositories.sms_code_repo import SmsCodeRepository
 from src.repositories.sms_log_repo import SmsLogRepository
@@ -249,7 +248,7 @@ class TestSmsCodeRepositoryDeleteExpired:
     def test_delete_expired(self, sms_code_repo: SmsCodeRepository) -> None:
         """测试清理过期验证码"""
         # 创建三个验证码：一个有效，两个过期
-        valid_code = sms_code_repo.create(
+        sms_code_repo.create(
             phone="13800138000",
             code="111111",
             scene="register",
@@ -295,7 +294,6 @@ class TestSmsLogRepositoryCreate:
         )
 
         # 验证日志已创建
-        from src.models.sms_send_log import SmsSendLog
         log = sms_log_repo.session.query(SmsSendLog).first()
 
         assert log is not None
@@ -315,7 +313,6 @@ class TestSmsLogRepositoryCreate:
             error_msg="服务超时"
         )
 
-        from src.models.sms_send_log import SmsSendLog
         log = sms_log_repo.session.query(SmsSendLog).first()
 
         assert log is not None
@@ -379,7 +376,6 @@ class TestSmsLogRepositoryLatestTime:
 
         assert latest_time is not None
         # 验证是最新的时间
-        from src.models.sms_send_log import SmsSendLog
         logs = sms_log_repo.session.query(SmsSendLog).filter(
             SmsSendLog.phone == "13800138000"
         ).order_by(SmsSendLog.created_at.desc()).all()

@@ -12,7 +12,6 @@
 """
 
 import time
-from datetime import datetime, timezone
 
 import pytest
 from fastapi.testclient import TestClient
@@ -27,7 +26,6 @@ class TestUsernameAuthFlow:
     def test_username_register_success(self, client: TestClient):
         """测试用户名注册成功"""
         # 准备测试数据（使用时间戳确保唯一性）
-        import time
         timestamp = int(time.time() * 1000)
         username = f"newuser{timestamp}"
         register_data = {
@@ -543,7 +541,7 @@ class TestErrorScenarios:
     def test_disabled_user_login_fails(self, client: TestClient, create_test_user):
         """测试已禁用用户登录失败"""
         # 创建并禁用用户
-        user = create_test_user(username="disabled", password="Test@123", status="disabled")
+        _ = create_test_user(username="disabled", password="Test@123", status="disabled")
 
         # 尝试登录
         response = client.post("/api/v1/auth/login", json={

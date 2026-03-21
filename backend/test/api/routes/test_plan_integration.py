@@ -10,7 +10,6 @@ generate-plan 集成测试
 
 import io
 from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 import pytest
 from fastapi.testclient import TestClient
@@ -70,7 +69,7 @@ class TestGeneratePlanIntegration:
     def admin_headers(self, client: TestClient, create_test_user) -> dict:
         """创建管理员认证头"""
         # 创建管理员用户
-        admin = create_test_user(
+        _ = create_test_user(
             username="admin",
             password="admin123",
             role="admin",
@@ -302,7 +301,6 @@ def _create_mock_plan():
         SafetyAssessment,
         EmergencyRescueContact,
         CityWeatherDaily,
-        HourlyWeather,
         ScenicSpot,
     )
     from src.schemas.base import Point3D

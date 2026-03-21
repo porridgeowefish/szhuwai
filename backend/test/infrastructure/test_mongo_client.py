@@ -72,7 +72,7 @@ class TestMongoClientWrapper:
             "src.infrastructure.mongo_client.MongoClient",
             return_value=mock_mongo_client
         ) as mock_client_class:
-            client = MongoClientWrapper(mock_config_with_auth)
+            MongoClientWrapper(mock_config_with_auth)
 
             # 验证 MongoClient 被正确调用
             call_args = mock_client_class.call_args
