@@ -102,32 +102,5 @@ class TestWorkflowIntegration:
                 weather_client.get_weather_3d("InvalidLocation")
 
 
-@pytest.mark.api
-@pytest.mark.integration
-class TestAPIIntegration:
-    """测试 API 集成（需要真实的 API 密钥）"""
-
-    def test_real_weather_api(self):
-        """测试真实的天气 API"""
-        config = APIConfig.from_env()
-        weather_client = WeatherClient(config)
-
-        try:
-            forecast = weather_client.get_weather_3d("Beijing")
-            assert forecast is not None
-            assert len(forecast.daily) > 0
-        except Exception as e:
-            pytest.skip(f"API call failed: {e}")
-
-    def test_real_map_api(self):
-        """测试真实的地图 API"""
-        config = APIConfig.from_env()
-        map_client = MapClient(config)
-
-        try:
-            result = map_client.geocode("北京市朝阳区")
-            assert result is not None
-            assert result.lat is not None
-            assert result.lon is not None
-        except Exception as e:
-            pytest.skip(f"API call failed: {e}")
+# 注意：真实 API 集成测试已删除，避免消耗 API 配额
+# 如需测试真实 API，请在本地手动运行

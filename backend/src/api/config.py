@@ -260,15 +260,13 @@ class APIConfig(BaseModel):
     def from_env(cls, env_file: str = ".env") -> "APIConfig":
         """从环境文件加载配置
 
-        智能查找 .env 文件：
-        1. 优先从环境变量加载（Docker/云端部署方式）
-        2. 查找当前目录的 .env
-        3. 向上查找父目录的 .env（支持从 backend/ 目录运行）
+        加载顺序：
+        1. 优先从系统环境变量加载（Docker/云端部署方式）
+        2. 从当前目录的 .env 文件加载
         """
-        # 优先从环境变量加载
         config_data = {}
 
-        # 加载环境变量
+        # 环境变量映射
         env_mapping = {
             "QWEATHER_API_KEY": "WEATHER_API_KEY",
             "AMAP_API_KEY": "MAP_API_KEY",
@@ -299,75 +297,37 @@ class APIConfig(BaseModel):
             "SMS_TEMPLATE_RESET_PASSWORD": "SMS_TEMPLATE_RESET_PASSWORD",
         }
 
+        # 1. 从系统环境变量加载
         for env_var, config_key in env_mapping.items():
             env_value = os.getenv(env_var)
             if env_value:
                 config_data[config_key] = env_value
 
-        # 智能查找 .env 文件路径
-        env_path = cls._find_env_file(env_file)
-
-        # 如果.env文件存在，加载它
-        if env_path and os.path.exists(env_path):
-            with open(env_path, 'r', encoding='utf-8') as f:
+        # 2. 从 .env 文件加载
+        if os.path.exists(env_file):
+            with open(env_file, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith('#'):
-                        if '=' in line:
-                            key, value = line.split('=', 1)
-                            key = key.strip()
-                            value = value.strip()
-                            # 处理环境变量映射
-                            if key in env_mapping:
-                                # 环境变量优先于文件配置
-                                if env_mapping[key] not in config_data:
-                                    config_data[env_mapping[key]] = value
-                            # 处理代理配置
-                            elif key == 'PROXY_HTTP':
-                                if 'PROXY' not in config_data:
-                                    config_data['PROXY'] = {}
-                                config_data['PROXY']['http'] = value
-                            elif key == 'PROXY_HTTPS':
-                                if 'PROXY' not in config_data:
-                                    config_data['PROXY'] = {}
-                                config_data['PROXY']['https'] = value
-                            # 处理其他配置项
-                            elif key in cls.model_fields and key not in config_data:
-                                config_data[key] = value
+                    if line and not line.startswith('#') and '=' in line:
+                        key, value = line.split('=', 1)
+                        key = key.strip()
+                        value = value.strip()
+                        # 处理环境变量映射
+                        if key in env_mapping:
+                            if env_mapping[key] not in config_data:
+                                config_data[env_mapping[key]] = value
+                        elif key == 'PROXY_HTTP':
+                            if 'PROXY' not in config_data:
+                                config_data['PROXY'] = {}
+                            config_data['PROXY']['http'] = value
+                        elif key == 'PROXY_HTTPS':
+                            if 'PROXY' not in config_data:
+                                config_data['PROXY'] = {}
+                            config_data['PROXY']['https'] = value
+                        elif key in cls.model_fields and key not in config_data:
+                            config_data[key] = value
 
         return cls(**config_data)
-
-    @classmethod
-    def _find_env_file(cls, env_file: str = ".env") -> str | None:
-        """智能查找 .env 文件
-
-        查找顺序：
-        1. 当前工作目录
-        2. 当前脚本所在目录
-        3. 向上逐级查找父目录（最多 5 层）
-        """
-        # 1. 当前工作目录
-        if os.path.exists(env_file):
-            return env_file
-
-        # 2. 当前脚本所在目录
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        script_env = os.path.join(script_dir, env_file)
-        if os.path.exists(script_env):
-            return script_env
-
-        # 3. 向上查找父目录
-        current_dir = os.getcwd()
-        for _ in range(5):  # 最多向上查找 5 层
-            parent_env = os.path.join(current_dir, env_file)
-            if os.path.exists(parent_env):
-                return parent_env
-            parent_dir = os.path.dirname(current_dir)
-            if parent_dir == current_dir:  # 已到达根目录
-                break
-            current_dir = parent_dir
-
-        return None
 
     def get_cache_key(self, api_type: str, params: Dict) -> str:
         """生成缓存键"""
