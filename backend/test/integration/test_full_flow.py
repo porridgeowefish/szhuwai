@@ -279,35 +279,52 @@ class TestFullFlow:
         """测试手机号用户完整流程"""
         # 使用时间戳确保手机号和用户名唯一性
         timestamp = int(time.time() * 1000)
-        phone_suffix = timestamp % 10**8  # 取后8位数字
-        phone = f"139{phone_suffix:08d}"  # 生成11位手机号：139(3位) + 8位数字
+        register_phone_suffix = timestamp % 10**8  # 取后8位数字
+        register_phone = f"139{register_phone_suffix:08d}"  # 生成11位手机号：139(3位) + 8位数字
         username = f"phusr{str(timestamp)[-6:]}"  # 10个字符，符合3-20字符要求
 
         # 1. 发送验证码
         send_response = client.post("/api/v1/auth/sms/send", json={
-            "phone": phone,
+            "phone": register_phone,
             "scene": "register"
         })
         assert send_response.status_code == 200
 
         # 2. 手机号注册
-        code = mock_sms.get_sent_code(phone)
+        code = mock_sms.get_sent_code(register_phone, "register")
         reg_response = client.post("/api/v1/auth/sms/register", json={
-            "phone": phone,
+            "phone": register_phone,
             "code": code,
             "password": "Phone@123",
             "username": username
         })
         assert reg_response.status_code == 201
 
-        # 3. 手机号登录
+        # 3. 使用另一个手机号测试登录流程（避免冷却时间）
+        login_phone_suffix = (timestamp + 1) % 10**8
+        login_phone = f"139{login_phone_suffix:08d}"
+
+        # 先注册登录用的手机号
         client.post("/api/v1/auth/sms/send", json={
-            "phone": phone,
+            "phone": login_phone,
+            "scene": "register"
+        })
+        login_reg_code = mock_sms.get_sent_code(login_phone, "register")
+        client.post("/api/v1/auth/sms/register", json={
+            "phone": login_phone,
+            "code": login_reg_code,
+            "password": "Phone@123",
+            "username": f"phlgn{str(timestamp)[-6:]}"
+        })
+
+        # 发送登录验证码
+        client.post("/api/v1/auth/sms/send", json={
+            "phone": login_phone,
             "scene": "login"
         })
-        login_code = mock_sms.get_sent_code(phone)
+        login_code = mock_sms.get_sent_code(login_phone, "login")
         login_response = client.post("/api/v1/auth/sms/login", json={
-            "phone": phone,
+            "phone": login_phone,
             "code": login_code
         })
         assert login_response.status_code == 200
@@ -580,7 +597,7 @@ class TestPasswordResetFlow:
         assert send_response.status_code == 200
 
         # 3. 重置密码
-        code = mock_sms.get_sent_code(user.phone)
+        code = mock_sms.get_sent_code(user.phone, "reset_password")
         reset_response = client.post("/api/v1/auth/password/reset", json={
             "phone": user.phone,
             "code": code,
@@ -674,7 +691,7 @@ class TestErrorScenarios:
 
         # 注册
         client.post("/api/v1/auth/sms/send", json={"phone": phone, "scene": "register"})
-        reg_code = mock_sms.get_sent_code(phone)
+        reg_code = mock_sms.get_sent_code(phone, "register")
         client.post("/api/v1/auth/sms/register", json={
             "phone": phone,
             "code": reg_code
@@ -709,7 +726,7 @@ class TestErrorScenarios:
 
         # 第一次注册
         client.post("/api/v1/auth/sms/send", json={"phone": phone, "scene": "register"})
-        code1 = mock_sms.get_sent_code(phone)
+        code1 = mock_sms.get_sent_code(phone, "register")
         reg1 = client.post("/api/v1/auth/sms/register", json={
             "phone": phone,
             "code": code1

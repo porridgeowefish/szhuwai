@@ -54,6 +54,11 @@ class PasswordHasher:
         # 将密码编码为 bytes
         password_bytes = password.encode("utf-8")
 
+        # bcrypt 限制密码最大 72 字节，超出部分会被忽略
+        # 手动截断以避免 ValueError
+        if len(password_bytes) > 72:
+            password_bytes = password_bytes[:72]
+
         # 生成哈希：salt 由 bcrypt 自动生成
         hashed = bcrypt.hashpw(password_bytes, bcrypt.gensalt(rounds=self.ROUNDS))
 
@@ -87,6 +92,10 @@ class PasswordHasher:
             # 将密码和哈希编码为 bytes
             password_bytes = password.encode("utf-8")
             hashed_bytes = hashed.encode("utf-8")
+
+            # bcrypt 限制密码最大 72 字节，与加密时保持一致
+            if len(password_bytes) > 72:
+                password_bytes = password_bytes[:72]
 
             # 验证密码
             return bcrypt.checkpw(password_bytes, hashed_bytes)

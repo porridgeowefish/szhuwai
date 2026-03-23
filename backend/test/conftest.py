@@ -144,8 +144,10 @@ def client(mocker) -> TestClient:
     from src.infrastructure.aliyun_sms_client import SmsSendResult
 
     # 全局验证码存储
-    global _test_sms_codes, _test_reports, _test_report_counter
-    _test_sms_codes.clear()
+    global _test_sms_codes_by_key, _test_sms_codes_latest, _test_reports, _test_report_counter, _template_to_scene
+    _test_sms_codes_by_key.clear()
+    _test_sms_codes_latest.clear()
+    _template_to_scene.clear()
     _test_reports.clear()
     _test_report_counter = 0
 
@@ -175,11 +177,32 @@ def client(mocker) -> TestClient:
     # Mock 短信客户端 - 记录发送的验证码
     def mock_send_verification_code(phone: str, code: str, template_id: str):
         """Mock 发送验证码，记录验证码到全局字典"""
-        _test_sms_codes[phone] = code
+        # 存储 (phone, template_id) -> code
+        _test_sms_codes_by_key[(phone, template_id)] = code
+        # 也存储 phone -> code 以便向后兼容
+        _test_sms_codes_latest[phone] = code
         return SmsSendResult(success=True, biz_id="test_biz_id")
+
+    def mock_get_template_id(scene: str) -> str:
+        """Mock 获取模板 ID"""
+        from src.api.config import APIConfig
+        config = APIConfig()
+        template_map = {
+            "register": config.SMS_TEMPLATE_REGISTER,
+            "login": config.SMS_TEMPLATE_LOGIN,
+            "bind": config.SMS_TEMPLATE_BIND,
+            "unbind": config.SMS_TEMPLATE_UNBIND,
+            "reset_password": config.SMS_TEMPLATE_RESET_PASSWORD,
+        }
+        template_id = template_map.get(scene, "")
+        # 存储双向映射
+        _template_to_scene[template_id] = scene
+        _template_to_scene[scene] = template_id  # scene -> template_id 映射
+        return template_id
 
     mock_sms_client = mocker.MagicMock()
     mock_sms_client.send_verification_code = mock_send_verification_code
+    mock_sms_client.get_template_id = mock_get_template_id
     mocker.patch("src.infrastructure.aliyun_sms_client.aliyun_sms_client", mock_sms_client)
     mocker.patch("src.infrastructure.aliyun_sms_client.get_aliyun_sms_client", return_value=mock_sms_client)
 
@@ -342,7 +365,12 @@ def client(mocker) -> TestClient:
 # ============ Mock Fixtures ============
 
 # 全局验证码存储（用于测试）
-_test_sms_codes: dict[str, str] = {}
+# _test_sms_codes_by_key: 按 (phone, template_id) 存储验证码
+# _test_sms_codes_latest: 按 phone 存储最新的验证码（用于向后兼容）
+_test_sms_codes_by_key: dict[tuple[str, str], str] = {}
+_test_sms_codes_latest: dict[str, str] = {}
+# 模板 ID 到场景的映射
+_template_to_scene: dict[str, str] = {}
 
 
 @pytest.fixture
@@ -353,13 +381,38 @@ def mock_sms():
     验证码由 client fixture 中的 mock 自动记录。
     """
     class MockSmsHelper:
-        def get_sent_code(self, phone: str) -> str:
-            """获取发送给指定手机号的验证码"""
-            return _test_sms_codes.get(phone, "123456")
+        def get_sent_code(self, phone: str, scene: str = None) -> str:
+            """获取发送给指定手机号的验证码
 
-        def get_all_codes(self) -> dict[str, str]:
+            Args:
+                phone: 手机号
+                scene: 场景（可选，如果不提供则返回该手机号最新的验证码）
+
+            Returns:
+                验证码
+            """
+            if scene:
+                # 优先使用已存储的 scene -> template_id 映射
+                template_id = _template_to_scene.get(scene, "")
+                if not template_id:
+                    # 如果映射不存在，从配置获取
+                    from src.api.config import APIConfig
+                    config = APIConfig()
+                    template_map = {
+                        "register": config.SMS_TEMPLATE_REGISTER,
+                        "login": config.SMS_TEMPLATE_LOGIN,
+                        "bind": config.SMS_TEMPLATE_BIND,
+                        "unbind": config.SMS_TEMPLATE_UNBIND,
+                        "reset_password": config.SMS_TEMPLATE_RESET_PASSWORD,
+                    }
+                    template_id = template_map.get(scene, "")
+                return _test_sms_codes_by_key.get((phone, template_id), "123456")
+            # 如果没有指定场景，返回该手机号最新的验证码
+            return _test_sms_codes_latest.get(phone, "123456")
+
+        def get_all_codes(self) -> dict[tuple[str, str], str]:
             """获取所有验证码"""
-            return dict(_test_sms_codes)
+            return dict(_test_sms_codes_by_key)
 
     return MockSmsHelper()
 
