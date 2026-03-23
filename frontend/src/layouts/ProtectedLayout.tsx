@@ -86,6 +86,15 @@ const ProtectedLayout: React.FC = () => {
                 <div className="w-9 h-9 rounded-full bg-[var(--forest)] flex items-center justify-center text-white font-bold">
                   {user?.username?.charAt(0).toUpperCase()}
                 </div>
+                {/* 桌面端退出按钮 */}
+                <button
+                  onClick={handleLogout}
+                  className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  title="退出登录"
+                >
+                  <LogOut size={16} />
+                  <span>退出</span>
+                </button>
               </div>
 
               {/* 移动端菜单按钮 */}

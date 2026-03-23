@@ -42,22 +42,32 @@ const PublicLayout: React.FC = () => {
                     用户管理
                   </Link>
                 )}
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-[var(--forest)] flex items-center justify-center text-white text-sm font-bold">
-                    {user?.username?.charAt(0).toUpperCase()}
-                  </div>
+                <div className="flex items-center gap-3">
                   <Link
                     to="/profile"
-                    className="text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
+                    className="hidden sm:flex items-center gap-2 text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
                   >
-                    {user?.username}
+                    <div className="w-8 h-8 rounded-full bg-[var(--forest)] flex items-center justify-center text-white text-sm font-bold">
+                      {user?.username?.charAt(0).toUpperCase()}
+                    </div>
+                    <span>{user?.username}</span>
+                  </Link>
+                  {/* 桌面端显示完整用户名 */}
+                  <Link
+                    to="/profile"
+                    className="sm:hidden flex items-center gap-1 text-sm font-medium text-zinc-600 hover:text-[var(--forest)] transition-colors"
+                  >
+                    <div className="w-8 h-8 rounded-full bg-[var(--forest)] flex items-center justify-center text-white text-sm font-bold">
+                      {user?.username?.charAt(0).toUpperCase()}
+                    </div>
                   </Link>
                   <button
                     onClick={handleLogout}
-                    className="text-sm font-medium text-red-600 hover:text-red-700 transition-colors flex items-center gap-1"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
+                    title="退出登录"
                   >
                     <LogOut size={14} />
-                    退出
+                    <span className="hidden sm:inline">退出</span>
                   </button>
                 </div>
               </>

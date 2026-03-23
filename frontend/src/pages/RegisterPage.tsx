@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Lock, Phone, Shield, Eye, Check } from 'lucide-react';
+import { User, Lock, Phone, Shield, Eye, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../lib/api/auth';
 import { cn } from '../utils/cn';
@@ -22,6 +22,92 @@ const RegisterPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [countdown, setCountdown] = useState(0);
 
+  // 新增：实时验证状态
+  const [usernameStatus, setUsernameStatus] = useState<'idle' | 'checking' | 'exists' | 'available'>('idle');
+  const [phoneStatus, setPhoneStatus] = useState<'idle' | 'checking' | 'exists' | 'available'>('idle');
+  const checkUsernameRef = useRef<NodeJS.Timeout | null>(null);
+  const checkPhoneRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 清理定时器
+  useEffect(() => {
+    return () => {
+      if (checkUsernameRef.current) clearTimeout(checkUsernameRef.current);
+      if (checkPhoneRef.current) clearTimeout(checkPhoneRef.current);
+    };
+  }, []);
+
+  // 防抖检查用户名是否存在
+  const checkUsernameExists = useCallback(async (username: string) => {
+    if (!username || username.length < 3) {
+      setUsernameStatus('idle');
+      return;
+    }
+
+    setUsernameStatus('checking');
+    try {
+      const result: any = await authAPI.checkExists({ username });
+      if (result?.exists) {
+        setUsernameStatus('exists');
+      } else {
+        setUsernameStatus('available');
+      }
+    } catch {
+      // 忽略错误，保持 idle 状态
+      setUsernameStatus('idle');
+    }
+  }, []);
+
+  // 防抖检查手机号是否存在
+  const checkPhoneExists = useCallback(async (phone: string) => {
+    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+      setPhoneStatus('idle');
+      return;
+    }
+
+    setPhoneStatus('checking');
+    try {
+      const result: any = await authAPI.checkExists({ phone });
+      if (result?.exists) {
+        setPhoneStatus('exists');
+      } else {
+        setPhoneStatus('available');
+      }
+    } catch {
+      // 忽略错误，保持 idle 状态
+      setPhoneStatus('idle');
+    }
+  }, []);
+
+  // 监听用户名输入变化
+  useEffect(() => {
+    if (checkUsernameRef.current) {
+      clearTimeout(checkUsernameRef.current);
+    }
+    checkUsernameRef.current = setTimeout(() => {
+      checkUsernameExists(formData.username);
+    }, 500);
+    return () => {
+      if (checkUsernameRef.current) {
+        clearTimeout(checkUsernameRef.current);
+      }
+    };
+  }, [formData.username, checkUsernameExists]);
+
+  // 监听手机号输入变化
+  useEffect(() => {
+    if (checkPhoneRef.current) {
+      clearTimeout(checkPhoneRef.current);
+    }
+    checkPhoneRef.current = setTimeout(() => {
+      checkPhoneExists(formData.phone);
+    }, 500);
+    return () => {
+      if (checkPhoneRef.current) {
+        clearTimeout(checkPhoneRef.current);
+      }
+    };
+  }, [formData.phone, checkPhoneExists]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -29,6 +115,11 @@ const RegisterPage: React.FC = () => {
 
     // 验证
     if (registerType === 'username') {
+      if (usernameStatus === 'exists') {
+        setError('该用户名已被注册，请更换');
+        setLoading(false);
+        return;
+      }
       if (formData.password.length < 6) {
         setError('密码长度至少6位');
         setLoading(false);
@@ -40,6 +131,11 @@ const RegisterPage: React.FC = () => {
         return;
       }
     } else {
+      if (phoneStatus === 'exists') {
+        setError('该手机号已被注册，请直接登录');
+        setLoading(false);
+        return;
+      }
       if (!formData.phone || !/^1[3-9]\d{9}$/.test(formData.phone)) {
         setError('请输入正确的手机号');
         setLoading(false);
@@ -62,7 +158,8 @@ const RegisterPage: React.FC = () => {
         // 手机号注册后使用返回的 token 直接登录
         await login({ phone: formData.phone, code: formData.code, _token: registerResult.accessToken });
       }
-      navigate('/', { replace: true });
+      // 注册成功后跳转到报告中心
+      navigate('/reports', { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || '注册失败，请稍后重试');
     } finally {
@@ -157,11 +254,29 @@ const RegisterPage: React.FC = () => {
                       type="text"
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl input-nature"
+                      className={cn(
+                        'w-full pl-10 pr-10 py-3 rounded-xl input-nature',
+                        usernameStatus === 'exists' && 'border-red-300 focus:border-red-500'
+                      )}
                       placeholder="请输入用户名"
                       disabled={loading}
                     />
+                    {usernameStatus === 'checking' && (
+                      <Loader2 size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 animate-spin" />
+                    )}
+                    {usernameStatus === 'exists' && (
+                      <AlertCircle size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />
+                    )}
+                    {usernameStatus === 'available' && (
+                      <Check size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" />
+                    )}
                   </div>
+                  {usernameStatus === 'exists' && (
+                    <p className="text-xs text-red-500">该用户名已被注册</p>
+                  )}
+                  {usernameStatus === 'available' && (
+                    <p className="text-xs text-green-600">该用户名可用</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -214,11 +329,29 @@ const RegisterPage: React.FC = () => {
                       type="tel"
                       value={formData.phone}
                       onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      className="w-full pl-10 pr-4 py-3 rounded-xl input-nature"
+                      className={cn(
+                        'w-full pl-10 pr-10 py-3 rounded-xl input-nature',
+                        phoneStatus === 'exists' && 'border-red-300 focus:border-red-500'
+                      )}
                       placeholder="请输入手机号"
                       disabled={loading}
                     />
+                    {phoneStatus === 'checking' && (
+                      <Loader2 size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 animate-spin" />
+                    )}
+                    {phoneStatus === 'exists' && (
+                      <AlertCircle size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-red-500" />
+                    )}
+                    {phoneStatus === 'available' && (
+                      <Check size={18} className="absolute right-3 top-1/2 -translate-y-1/2 text-green-500" />
+                    )}
                   </div>
+                  {phoneStatus === 'exists' && (
+                    <p className="text-xs text-red-500">该手机号已注册</p>
+                  )}
+                  {phoneStatus === 'available' && (
+                    <p className="text-xs text-green-600">该手机号可用</p>
+                  )}
                 </div>
 
                 <div className="space-y-2">

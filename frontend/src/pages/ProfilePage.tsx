@@ -40,7 +40,7 @@ const ProfilePage: React.FC = () => {
               </span>
               <span className="flex items-center gap-1">
                 <Calendar size={14} />
-                {new Date(user.created_at).toLocaleDateString('zh-CN')} 加入
+                {new Date(user.createdAt).toLocaleDateString('zh-CN')} 加入
               </span>
             </div>
           </div>
@@ -79,7 +79,7 @@ const ProfilePage: React.FC = () => {
             </div>
           </div>
           <p className="text-xs text-zinc-400 mt-3">
-            每日额度于 {new Date(quota.reset_at).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重置
+            每日额度于 {new Date(quota.resetAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重置
           </p>
         </div>
       )}

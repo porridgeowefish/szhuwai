@@ -181,7 +181,8 @@ class TestFullFlow:
     def test_full_user_journey(self, client: TestClient, tmp_path):
         """测试完整的用户旅程：注册 → 登录 → 查额度 → 生成计划 → 查报告"""
         timestamp = int(time.time() * 1000)
-        username = f"journey{timestamp}"
+        suffix = str(timestamp)[-6:]  # 取后6位
+        username = f"jrn{suffix}"  # 9个字符，符合3-20字符要求
         password = "Journey@123456"
 
         # 1. 用户名注册
@@ -276,7 +277,11 @@ class TestFullFlow:
 
     def test_phone_user_journey(self, client: TestClient, mock_sms, tmp_path):
         """测试手机号用户完整流程"""
-        phone = "13900139111"
+        # 使用时间戳确保手机号和用户名唯一性
+        timestamp = int(time.time() * 1000)
+        phone_suffix = timestamp % 10**8  # 取后8位数字
+        phone = f"139{phone_suffix:08d}"  # 生成11位手机号：139(3位) + 8位数字
+        username = f"phusr{str(timestamp)[-6:]}"  # 10个字符，符合3-20字符要求
 
         # 1. 发送验证码
         send_response = client.post("/api/v1/auth/sms/send", json={
@@ -291,7 +296,7 @@ class TestFullFlow:
             "phone": phone,
             "code": code,
             "password": "Phone@123",
-            "username": "phoneuser1"
+            "username": username
         })
         assert reg_response.status_code == 201
 

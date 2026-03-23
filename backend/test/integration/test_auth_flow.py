@@ -364,21 +364,29 @@ class TestPhoneBindingFlow:
 
     def test_bind_phone_then_login_with_phone(self, client: TestClient, mock_sms):
         """测试绑定手机后可以用手机号登录"""
+        # 使用时间戳确保用户名唯一性（限制在20字符以内）
+        timestamp = int(time.time() * 1000)
+        suffix = str(timestamp)[-6:]  # 取后6位
+        username = f"bindusr{suffix}"  # 总共11个字符，符合3-20字符要求
+
         # 用户名注册
-        client.post("/api/v1/auth/register", json={
-            "username": "binduser",
+        reg_resp = client.post("/api/v1/auth/register", json={
+            "username": username,
             "password": "Bind@123"
         })
+        assert reg_resp.status_code == 201, f"注册失败: {reg_resp.text}"
 
         # 登录获取 Token
         login_resp = client.post("/api/v1/auth/login", json={
-            "username": "binduser",
+            "username": username,
             "password": "Bind@123"
         })
+        assert login_resp.status_code == 200, f"登录失败: {login_resp.text}"
         token = login_resp.json()["data"]["accessToken"]
         headers = {"Authorization": f"Bearer {token}"}
 
-        phone = "13400134000"
+        phone_suffix = timestamp % 10**8  # 取后8位数字
+        phone = f"134{phone_suffix:08d}"  # 生成11位手机号：134(3位) + 8位数字
 
         # 绑定手机
         client.post("/api/v1/auth/sms/send", json={
@@ -386,10 +394,11 @@ class TestPhoneBindingFlow:
             "scene": "bind"
         })
         bind_code = mock_sms.get_sent_code(phone)
-        client.post("/api/v1/auth/phone/bind", json={
+        bind_resp = client.post("/api/v1/auth/phone/bind", json={
             "phone": phone,
             "code": bind_code
         }, headers=headers)
+        assert bind_resp.status_code == 200, f"绑定失败: {bind_resp.text}"
 
         # 用手机号登录
         client.post("/api/v1/auth/sms/send", json={
@@ -402,7 +411,7 @@ class TestPhoneBindingFlow:
             "code": login_code
         })
         assert phone_login.status_code == 200
-        assert phone_login.json()["data"]["user"]["username"] == "binduser"
+        assert phone_login.json()["data"]["user"]["username"] == username
 
     def test_unbind_phone_success(self, client: TestClient, mock_sms, create_test_user):
         """测试解绑手机号成功"""

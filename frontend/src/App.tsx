@@ -11,6 +11,7 @@ import HomePage from './pages/HomePage';
 import LoginPage from './pages/LoginPage';
 import RegisterPage from './pages/RegisterPage';
 import ReportDetailPage from './pages/ReportDetailPage';
+import ToolsPage from './pages/ToolsPage';
 
 // Lazy load pages
 const ReportListPage = React.lazy(() => import('./pages/ReportListPage'));
@@ -46,6 +47,7 @@ const App: React.FC = () => {
               >
                 <Route path="/reports" element={<ReportListPage />} />
                 <Route path="/reports/:id" element={<ReportDetailPage />} />
+                <Route path="/tools" element={<ToolsPage />} />
                 <Route path="/profile" element={<ProfilePage />} />
                 <Route path="/profile/password" element={<ChangePasswordPage />} />
                 <Route path="/tools/track" element={<TrackAnalysisPage />} />

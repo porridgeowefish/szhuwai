@@ -39,7 +39,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(async (credentials: LoginRequest & { _token?: string }) => {
     // 如果已提供 token（注册后直接登录），直接使用
     if (credentials._token) {
-      // 获取用户信息
       const tempToken = credentials._token;
       localStorage.setItem('access_token', tempToken);
 
@@ -57,14 +56,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? authAPI.login({ username: credentials.username, password: credentials.password })
       : authAPI.loginWithPhone({ phone: credentials.phone, code: credentials.code })) as any;
 
-    const { access_token, user: userData } = response;
+    const { accessToken, user: userData } = response;
 
     // 保存到 state
-    setToken(access_token);
+    setToken(accessToken);
     setUser(userData);
 
     // 保存到 localStorage
-    localStorage.setItem('access_token', access_token);
+    localStorage.setItem('access_token', accessToken);
     localStorage.setItem('user', JSON.stringify(userData));
   }, []);
 

@@ -36,14 +36,15 @@ class UserResponse(UserBase):
     """用户响应模型
 
     用于 API 返回的用户信息，不包含敏感数据。
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
 
     id: int
-    created_at: datetime
-    updated_at: datetime
-    last_login_at: Optional[datetime] = None
+    created_at: datetime = Field(alias="createdAt")
+    updated_at: datetime = Field(alias="updatedAt")
+    last_login_at: Optional[datetime] = Field(default=None, alias="lastLoginAt")
 
     @property
     def phone_masked(self) -> str | None:

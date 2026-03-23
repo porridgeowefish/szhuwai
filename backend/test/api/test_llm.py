@@ -31,11 +31,13 @@ class TestLLMAPI:
         if not self.api_key:
             pytest.skip("未配置 LLM_API_KEY，跳过 LLM API 测试")
 
+    @pytest.mark.llm
     def test_api_key_not_empty(self):
         """测试 API Key 不为空"""
         assert self.api_key, "LLM_API_KEY 不能为空"
         assert self.api_key != "your_llm_api_key_here", "请配置真实的 LLM_API_KEY"
 
+    @pytest.mark.llm
     def test_simple_chat_completion(self):
         """测试简单的对话补全请求"""
         headers = {
@@ -73,6 +75,7 @@ class TestLLMAPI:
         assert content, "返回内容为空"
         print(f"\n[OK] LLM 回复: {content}")
 
+    @pytest.mark.llm
     def test_json_response_format(self):
         """测试 JSON 格式响应"""
         headers = {
@@ -112,13 +115,19 @@ class TestLLMAPI:
 
         # 验证返回内容是有效的 JSON
         try:
-            parsed = json.loads(content)
+            # 清理可能的控制字符（LLM 有时会在 JSON 中包含换行符等）
+            import re
+            cleaned_content = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', content)
+            # 清理多余的换行和空格
+            cleaned_content = cleaned_content.strip()
+            parsed = json.loads(cleaned_content)
             assert isinstance(parsed, dict), "返回的 JSON 不是对象"
             print(f"\n[OK] JSON 响应解析成功: {parsed}")
         except json.JSONDecodeError as e:
             pytest.fail(f"返回内容不是有效的 JSON: {content[:200]}, 错误: {e}")
 
     @pytest.mark.api
+    @pytest.mark.llm
     def test_system_prompt_context(self):
         """测试系统提示词 + 用户上下文的请求模式"""
         from src.prompts import get_system_prompt
@@ -183,7 +192,12 @@ class TestLLMAPI:
 
         # 验证返回内容是有效的 JSON
         try:
-            parsed = json.loads(content)
+            # 清理可能的控制字符（LLM 有时会在 JSON 中包含换行符等）
+            import re
+            cleaned_content = re.sub(r'[\x00-\x1f\x7f-\x9f]', '', content)
+            # 清理多余的换行和空格
+            cleaned_content = cleaned_content.strip()
+            parsed = json.loads(cleaned_content)
             print("\n[OK] 规划 JSON 解析成功:")
             print(f"   - plan_name: {parsed.get('plan_name', 'N/A')}")
             print(f"   - overall_rating: {parsed.get('overall_rating', 'N/A')}")
@@ -191,6 +205,7 @@ class TestLLMAPI:
         except json.JSONDecodeError as e:
             pytest.fail(f"返回内容不是有效的 JSON: {content[:300]}, 错误: {e}")
 
+    @pytest.mark.llm
     def test_available_models(self):
         """测试可用的模型列表"""
         # 硅基流动的模型列表端点

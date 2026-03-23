@@ -120,13 +120,13 @@ const ReportDetailPage: React.FC = () => {
           <div>
             <div className="flex items-center gap-3 mb-1">
               <h1 className="text-2xl font-black tracking-tight" style={{ fontFamily: 'Playfair Display, serif' }}>
-                {plan.plan_name}
+                {plan.planName}
               </h1>
-              <Badge variant={getRatingVariant(plan.overall_rating)}>{plan.overall_rating}</Badge>
+              <Badge variant={getRatingVariant(plan.overallRating)}>{plan.overallRating}</Badge>
             </div>
             <div className="flex items-center gap-4 text-xs text-zinc-500 font-mono">
-              <span className="flex items-center gap-1"><Clock size={12} /> {formatDateTime(plan.created_at)}</span>
-              <span className="flex items-center gap-1">ID: {plan.plan_id}</span>
+              <span className="flex items-center gap-1"><Clock size={12} /> {formatDateTime(plan.createdAt)}</span>
+              <span className="flex items-center gap-1">ID: {plan.planId}</span>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -134,7 +134,7 @@ const ReportDetailPage: React.FC = () => {
               onClick={async () => {
                 if (mainContentRef.current && plan) {
                   try {
-                    await exportToPDF(mainContentRef.current, plan.plan_name);
+                    await exportToPDF(mainContentRef.current, plan.planName);
                   } catch (err) {
                     console.error('PDF导出错误:', err);
                     alert('PDF导出失败');
@@ -154,17 +154,17 @@ const ReportDetailPage: React.FC = () => {
           {/* 1. 线路简介 */}
           <section>
             <RouteBrief
-              planName={plan.plan_name}
-              trackDetail={plan.track_detail}
-              overallRating={plan.overall_rating}
+              planName={plan.planName}
+              trackDetail={plan.trackDetail}
+              overallRating={plan.overallRating}
             />
           </section>
 
           {/* 2. 线路详情 */}
-          {plan.track_detail && (
+          {plan.trackDetail && (
             <section>
               <SectionTitle title="线路详情" icon={Mountain} colorClass="text-[var(--forest)]" />
-              <TrackDetailSection trackDetail={plan.track_detail} />
+              <TrackDetailSection trackDetail={plan.trackDetail} />
             </section>
           )}
 
@@ -172,27 +172,27 @@ const ReportDetailPage: React.FC = () => {
           <section>
             <SectionTitle title="沿途风光" icon={MapIcon} colorClass="text-indigo-600" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {plan.scenic_spots.map((spot, idx) => (
+              {plan.scenicSpots.map((spot, idx) => (
                 <Card key={idx} className="group hover:border-indigo-200 transition-all">
                   <div className="flex gap-4">
                     <div className={cn(
                       'w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors',
-                      spot.spot_type === '自然风光'
+                      spot.spotType === '自然风光'
                         ? 'bg-[var(--forest)]/10 text-[var(--forest)] group-hover:bg-[var(--forest)] group-hover:text-white'
                         : 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
                     )}>
-                      {spot.spot_type === '自然风光' ? <Trees size={24} /> : <Landmark size={24} />}
+                      {spot.spotType === '自然风光' ? <Trees size={24} /> : <Landmark size={24} />}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
                         <h4 className="font-bold text-sm">{spot.name}</h4>
                         <span className={cn(
                           'text-[10px] px-2 py-0.5 rounded-full',
-                          spot.spot_type === '自然风光'
+                          spot.spotType === '自然风光'
                             ? 'bg-[var(--forest)]/10 text-[var(--forest)]'
                             : 'bg-amber-50 text-amber-600'
                         )}>
-                          {spot.spot_type}
+                          {spot.spotType}
                         </span>
                       </div>
                       <p className="text-sm text-zinc-600 leading-relaxed">{spot.description}</p>
@@ -200,7 +200,7 @@ const ReportDetailPage: React.FC = () => {
                   </div>
                 </Card>
               ))}
-              {plan.scenic_spots.length === 0 && (
+              {plan.scenicSpots.length === 0 && (
                 <div className="col-span-full p-6 border-2 border-dashed border-[var(--stone)] rounded-2xl flex flex-col items-center justify-center text-zinc-400 gap-2">
                   <MapPin size={24} />
                   <span className="text-xs font-medium">沿途风光等待探索...</span>
@@ -210,11 +210,11 @@ const ReportDetailPage: React.FC = () => {
           </section>
 
           {/* 4. 交通方案 */}
-          {plan.transport_scheme && (
+          {plan.transportScheme && (
             <section>
               <SectionTitle title="交通方案" icon={MapPin} colorClass="text-amber-600" />
               <div className="space-y-4">
-                {plan.transport_scheme.summary && (
+                {plan.transportScheme.summary && (
                   <Card className="p-4 bg-[var(--sand)]">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-3">
@@ -222,25 +222,25 @@ const ReportDetailPage: React.FC = () => {
                           <MapIcon size={20} className="text-zinc-600" />
                         </div>
                         <div>
-                          <div className="text-sm text-zinc-500">从 {plan.transport_scheme.origin?.address || '起点'}</div>
-                          <div className="text-sm text-zinc-500">到 {plan.transport_scheme.destination?.address || '终点'}</div>
+                          <div className="text-sm text-zinc-500">从 {plan.transportScheme.origin?.address || '起点'}</div>
+                          <div className="text-sm text-zinc-500">到 {plan.transportScheme.destination?.address || '终点'}</div>
                         </div>
                       </div>
                       <div className="text-right">
-                        {plan.transport_scheme.summary.total_distance && (
-                          <div className="text-lg font-bold text-zinc-900">{plan.transport_scheme.summary.total_distance}</div>
+                        {plan.transportScheme.summary.totalDistance && (
+                          <div className="text-lg font-bold text-zinc-900">{plan.transportScheme.summary.totalDistance}</div>
                         )}
-                        {plan.transport_scheme.summary.total_time && (
-                          <div className="text-xs text-zinc-500">约 {plan.transport_scheme.summary.total_time}</div>
+                        {plan.transportScheme.summary.totalTime && (
+                          <div className="text-xs text-zinc-500">约 {plan.transportScheme.summary.totalTime}</div>
                         )}
                       </div>
                     </div>
                   </Card>
                 )}
-                {plan.transport_scheme.outbound?.driving && (
+                {plan.transportScheme.outbound?.driving && (
                   <Card className={cn(
                     'p-4 border-l-4',
-                    plan.transport_scheme.recommended_mode === '驾车' ? 'border-l-amber-500 bg-amber-50/50' : 'border-l-[var(--stone)]'
+                    plan.transportScheme.recommendedMode === '驾车' ? 'border-l-amber-500 bg-amber-50/50' : 'border-l-[var(--stone)]'
                   )}>
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
@@ -252,21 +252,21 @@ const ReportDetailPage: React.FC = () => {
                           <p className="text-xs text-zinc-500">自驾前往</p>
                         </div>
                       </div>
-                      {plan.transport_scheme.recommended_mode === '驾车' && (
+                      {plan.transportScheme.recommendedMode === '驾车' && (
                         <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">推荐</span>
                       )}
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div>
-                        <div className="text-lg font-bold text-zinc-900">{plan.transport_scheme.outbound.driving.distance_km}km</div>
+                        <div className="text-lg font-bold text-zinc-900">{plan.transportScheme.outbound.driving.distanceKm}km</div>
                         <div className="text-xs text-zinc-500">距离</div>
                       </div>
                       <div>
-                        <div className="text-lg font-bold text-zinc-900">{plan.transport_scheme.outbound.driving.duration_min}分钟</div>
+                        <div className="text-lg font-bold text-zinc-900">{plan.transportScheme.outbound.driving.durationMin}分钟</div>
                         <div className="text-xs text-zinc-500">预计时间</div>
                       </div>
                       <div>
-                        <div className="text-lg font-bold text-zinc-900">{plan.transport_scheme.outbound.driving.tolls_yuan}元</div>
+                        <div className="text-lg font-bold text-zinc-900">{plan.transportScheme.outbound.driving.tollsYuan}元</div>
                         <div className="text-xs text-zinc-500">过路费</div>
                       </div>
                     </div>
@@ -288,13 +288,13 @@ const ReportDetailPage: React.FC = () => {
                     </div>
                     <div>
                       <div className="text-sm font-bold text-rose-900">
-                        综合风险定级: {plan.safety_assessment.overall_risk || '未知'}
+                        综合风险定级: {plan.safetyAssessment.overallRisk || '未知'}
                       </div>
-                      <p className="text-xs text-rose-700">{plan.safety_assessment.conditions || '暂无详细描述'}</p>
+                      <p className="text-xs text-rose-700">{plan.safetyAssessment.conditions || '暂无详细描述'}</p>
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {plan.risk_factors.map((factor, idx) => (
+                    {plan.riskFactors.map((factor, idx) => (
                       <span key={idx} className="px-2 py-1 bg-white text-rose-600 text-[10px] font-black uppercase tracking-tighter rounded border border-rose-200">
                         {factor}
                       </span>
@@ -304,7 +304,7 @@ const ReportDetailPage: React.FC = () => {
                 <div className="space-y-4">
                   <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">具体安全隐患</h3>
                   <div className="grid grid-cols-1 gap-4">
-                    {plan.safety_issues.map((issue: SafetyIssue, idx: number) => (
+                    {plan.safetyIssues.map((issue: SafetyIssue, idx: number) => (
                       <div key={idx} className="p-4 border border-[var(--stone)] rounded-xl hover:border-zinc-200 transition-colors">
                         <div className="flex items-center justify-between mb-2">
                           <div className="font-bold text-sm flex items-center gap-2">
@@ -334,7 +334,7 @@ const ReportDetailPage: React.FC = () => {
                   <h3 className="font-bold">应急救援联络</h3>
                 </div>
                 <div className="space-y-4">
-                  {plan.emergency_rescue_contacts.map((contact, idx) => (
+                  {plan.emergencyRescueContacts.map((contact, idx) => (
                     <div key={idx} className="p-4 bg-white/5 rounded-xl border border-white/10">
                       <div className="text-xs text-zinc-400 mb-1">{contact.name}</div>
                       <div className="text-lg font-mono font-bold text-white tracking-wider">{contact.phone}</div>
@@ -382,49 +382,49 @@ const ReportDetailPage: React.FC = () => {
                       <div className="space-y-6">
                         <div className="flex items-end gap-4">
                           <div className="text-5xl font-black tracking-tighter">
-                            {plan.trip_date_weather.tempMax}°<span className="text-zinc-300">/</span>{plan.trip_date_weather.tempMin}°
+                            {plan.tripDateWeather.tempMax}°<span className="text-zinc-300">/</span>{plan.tripDateWeather.tempMin}°
                           </div>
                           <div className="pb-1">
-                            <div className="text-sm font-bold">{plan.trip_date_weather.textDay}</div>
-                            <div className="text-xs text-zinc-500">日期: {plan.trip_date_weather.fxDate}</div>
+                            <div className="text-sm font-bold">{plan.tripDateWeather.textDay}</div>
+                            <div className="text-xs text-zinc-500">日期: {plan.tripDateWeather.fxDate}</div>
                           </div>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                           <div className="flex items-center gap-2 text-zinc-600">
                             <Wind size={16} className="text-zinc-400" />
-                            <span className="text-xs font-medium">风力: {plan.trip_date_weather.windScaleDay}级</span>
+                            <span className="text-xs font-medium">风力: {plan.tripDateWeather.windScaleDay}级</span>
                           </div>
                           <div className="flex items-center gap-2 text-zinc-600">
                             <Droplets size={16} className="text-zinc-400" />
-                            <span className="text-xs font-medium">降水: {plan.trip_date_weather.precip}mm</span>
+                            <span className="text-xs font-medium">降水: {plan.tripDateWeather.precip}mm</span>
                           </div>
-                          {plan.trip_date_weather.uvIndex != null && (
+                          {plan.tripDateWeather.uvIndex != null && (
                             <div className="flex items-center gap-2 text-zinc-600">
                               <Sun size={16} className="text-zinc-400" />
-                              <span className="text-xs font-medium">紫外线: {plan.trip_date_weather.uvIndex}</span>
+                              <span className="text-xs font-medium">紫外线: {plan.tripDateWeather.uvIndex}</span>
                             </div>
                           )}
                         </div>
                       </div>
                       <div className="bg-[var(--sand)] rounded-xl p-4 space-y-3">
                         <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">关键节点格点数据</div>
-                        {plan.critical_grid_weather.map((grid, idx) => {
-                          const windSpeed = windScaleToSpeed(grid.wind_scale);
+                        {plan.criticalGridWeather.map((grid, idx) => {
+                          const windSpeed = windScaleToSpeed(grid.windScale);
                           const windChill = calculateWindChill(grid.temp, windSpeed.avg);
                           return (
                             <div key={idx} className={cn(
                               'flex items-center justify-between p-3 rounded-lg border',
-                              grid.point_type === '最高点' ? 'bg-white border-amber-200 shadow-sm' : 'bg-transparent border-[var(--stone)]'
+                              grid.pointType === '最高点' ? 'bg-white border-amber-200 shadow-sm' : 'bg-transparent border-[var(--stone)]'
                             )}>
                               <div className="flex items-center gap-2">
-                                {grid.point_type === '最高点' ? <ArrowUp size={14} className="text-amber-500" /> : <MapPin size={14} className="text-zinc-400" />}
-                                <span className="text-sm font-bold">{grid.point_type}</span>
+                                {grid.pointType === '最高点' ? <ArrowUp size={14} className="text-amber-500" /> : <MapPin size={14} className="text-zinc-400" />}
+                                <span className="text-sm font-bold">{grid.pointType}</span>
                               </div>
                               <div className="flex items-center gap-4 text-xs font-mono">
                                 <span className="flex items-center gap-1"><Thermometer size={12} /> {grid.temp}°C</span>
-                                <span className="flex items-center gap-1"><Wind size={12} /> {grid.wind_scale}</span>
+                                <span className="flex items-center gap-1"><Wind size={12} /> {grid.windScale}</span>
                                 <span className="flex items-center gap-1"><Droplets size={12} /> {grid.humidity}%</span>
-                                {grid.point_type === '最高点' && windChill !== null && (
+                                {grid.pointType === '最高点' && windChill !== null && (
                                   <span className={cn('flex items-center gap-1', getWindChillRisk(windChill)?.color)}>
                                     <Snowflake size={12} />
                                     体感 {windChill}°C
@@ -445,7 +445,7 @@ const ReportDetailPage: React.FC = () => {
                       className="h-[300px] w-full"
                     >
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={plan.hourly_weather.map(h => {
+                        <AreaChart data={plan.hourlyWeather.map(h => {
                           let timeLabel = '';
                           if (h.fxTime.includes('T')) {
                             const timePart = h.fxTime.split('T')[1];
@@ -503,7 +503,7 @@ const ReportDetailPage: React.FC = () => {
                 <Card>
                   <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-6">装备清单</h3>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {plan.equipment_recommendations.map((item: EquipmentItem, i: number) => (
+                    {plan.equipmentRecommendations.map((item: EquipmentItem, i: number) => (
                       <div
                         key={i}
                         className="p-3 rounded-xl border border-[var(--stone)] hover:border-zinc-200 hover:shadow-sm transition-all group cursor-pointer"
@@ -528,7 +528,7 @@ const ReportDetailPage: React.FC = () => {
                   <Navigation size={16} /> 向导建议
                 </h3>
                 <div className="text-sm text-[var(--forest-dark)] leading-relaxed whitespace-pre-line">
-                  {plan.hiking_advice || '暂无向导建议'}
+                  {plan.hikingAdvice || '暂无向导建议'}
                 </div>
               </Card>
             </div>

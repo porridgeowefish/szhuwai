@@ -34,7 +34,9 @@ const LoginPage: React.FC = () => {
       } else {
         await login({ phone: formData.phone, code: formData.code });
       }
-      navigate(from, { replace: true });
+      // 如果 from 是根路径或登录/注册页，跳转到报告中心，否则跳转到原页面
+      const redirectPath = from === '/' || from.startsWith('/auth') ? '/reports' : from;
+      navigate(redirectPath, { replace: true });
     } catch (err: any) {
       setError(err.response?.data?.message || err.message || '登录失败，请稍后重试');
     } finally {

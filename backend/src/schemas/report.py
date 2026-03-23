@@ -6,20 +6,23 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class ReportListItem(BaseModel):  # type: ignore[misc]
     """报告列表项
 
     用于列表展示，包含基本信息。
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
     """
 
+    model_config = ConfigDict(populate_by_name=True)
+
     id: str = Field(..., description="报告 ID")
-    plan_name: str = Field(..., description="计划名称")
-    trip_date: str = Field(..., description="出行日期")
-    overall_rating: str = Field(..., description="总体评分")
-    created_at: datetime = Field(..., description="创建时间")
+    plan_name: str = Field(..., alias="planName", description="计划名称")
+    trip_date: str = Field(..., alias="tripDate", description="出行日期")
+    overall_rating: str = Field(..., alias="overallRating", description="总体评分")
+    created_at: datetime = Field(..., alias="createdAt", description="创建时间")
 
 
 class ReportDetail(ReportListItem):
@@ -28,7 +31,7 @@ class ReportDetail(ReportListItem):
     包含完整的报告内容。
     """
 
-    user_id: int = Field(..., description="用户 ID")
+    user_id: int = Field(..., alias="userId", description="用户 ID")
     content: dict[str, Any] = Field(..., description="完整的计划内容")
 
 

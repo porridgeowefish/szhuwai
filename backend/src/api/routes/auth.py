@@ -62,6 +62,57 @@ def get_auth_service() -> AuthService:
 # ============ 公开接口 ============
 
 
+class CheckExistsRequest(BaseModel):
+    """检查是否存在请求"""
+
+    username: str | None = Field(default=None, min_length=3, max_length=20, description="用户名")
+    phone: str | None = Field(default=None, description="手机号")
+
+
+class CheckExistsResponse(BaseModel):
+    """检查是否存在响应"""
+
+    exists: bool = Field(..., description="是否存在")
+    field: str = Field(..., description="检查的字段：username 或 phone")
+
+
+@router.post("/check-exists", response_model=ApiResponse[CheckExistsResponse])
+async def check_exists(
+    request: CheckExistsRequest,
+    auth_service: AuthService = Depends(get_auth_service),
+) -> ApiResponse[CheckExistsResponse]:
+    """
+    检查用户名或手机号是否已存在
+
+    用于注册时的实时验证。
+
+    - **username**: 用户名（可选）
+    - **phone**: 手机号（可选，至少提供一个）
+
+    返回对应字段是否已存在。
+    """
+    if request.username:
+        exists = auth_service._user_repo.exists_by_username(request.username)
+        return ApiResponse[CheckExistsResponse](
+            code=200,
+            message="检查完成",
+            data=CheckExistsResponse(exists=exists, field="username"),
+        )
+    elif request.phone:
+        exists = auth_service._user_repo.exists_by_phone(request.phone)
+        return ApiResponse[CheckExistsResponse](
+            code=200,
+            message="检查完成",
+            data=CheckExistsResponse(exists=exists, field="phone"),
+        )
+    else:
+        return ApiResponse[CheckExistsResponse](
+            code=400,
+            message="请提供 username 或 phone 参数",
+            data=None,
+        )
+
+
 @router.post("/register", response_model=ApiResponse[UserWithToken], status_code=status.HTTP_201_CREATED)
 async def register_by_username(
     request: UsernameRegisterRequest,

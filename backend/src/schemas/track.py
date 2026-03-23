@@ -14,10 +14,14 @@ from .base import Point3D
 
 
 class ElevationPoint(BaseModel):
-    """海拔轨迹点（用于前端可视化）"""
-    distance_m: float = Field(..., description="累计距离（米）")
-    elevation_m: float = Field(..., description="海拔（米）")
-    is_key_point: bool = Field(default=False, description="是否为关键点")
+    """海拔轨迹点（用于前端可视化）
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
+    distance_m: float = Field(..., alias="distanceM", description="累计距离（米）")
+    elevation_m: float = Field(..., alias="elevationM", description="海拔（米）")
+    is_key_point: bool = Field(default=False, alias="isKeyPoint", description="是否为关键点")
     label: Optional[str] = Field(None, description="关键点标签")
 
 
@@ -26,23 +30,30 @@ class TrackPointGCJ02(BaseModel):
 
     采用智能抽样策略：最多200点 + 关键点
     预估数据量 ≈ 10KB
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
     """
+    model_config = ConfigDict(populate_by_name=True)
+
     lng: float = Field(..., description="经度（GCJ02坐标系）")
     lat: float = Field(..., description="纬度（GCJ02坐标系）")
     elevation: float = Field(default=0, description="海拔（米）")
-    is_key_point: bool = Field(default=False, description="是否为关键点")
+    is_key_point: bool = Field(default=False, alias="isKeyPoint", description="是否为关键点")
     label: Optional[str] = Field(None, description="关键点标签")
 
 
 class TerrainChange(BaseModel):
-    """地形变化段"""
-    change_type: Literal["large_ascent", "large_descent"] = Field(..., description="Terrain change type")
-    start_point: Point3D = Field(..., description="路段起点")
-    end_point: Point3D = Field(..., description="路段终点")
-    start_distance_m: float = Field(default=0, description="起点累计距离（米）")
-    elevation_diff: float = Field(..., description="绝对上升/下降量 (米)", gt=0)
-    distance_m: float = Field(..., description="该路段水平距离 (米)", gt=0)
-    gradient_percent: float = Field(..., description="坡度 (百分比 %，如 15.5%)", ge=0)
+    """地形变化段
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
+    change_type: Literal["large_ascent", "large_descent"] = Field(..., alias="changeType", description="Terrain change type")
+    start_point: Point3D = Field(..., alias="startPoint", description="路段起点")
+    end_point: Point3D = Field(..., alias="endPoint", description="路段终点")
+    start_distance_m: float = Field(default=0, alias="startDistanceM", description="起点累计距离（米）")
+    elevation_diff: float = Field(..., alias="elevationDiff", description="绝对上升/下降量 (米)", gt=0)
+    distance_m: float = Field(..., alias="distanceM", description="该路段水平距离 (米)", gt=0)
+    gradient_percent: float = Field(..., alias="gradientPercent", description="坡度 (百分比 %，如 15.5%)", ge=0)
 
     @model_validator(mode='before')
     @classmethod
@@ -67,46 +78,50 @@ class TerrainChange(BaseModel):
 
 
 class TrackAnalysisResult(BaseModel):
-    """轨迹分析结果"""
+    """轨迹分析结果
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
+    """
     model_config = ConfigDict(
+        populate_by_name=True,
         json_encoders={datetime: lambda v: v.isoformat()}
     )
 
-    total_distance_km: float = Field(..., description="总里程 (公里)", gt=0)
-    total_ascent_m: float = Field(..., description="总累计爬升 (米)", ge=0)
-    total_descent_m: float = Field(..., description="总累计下降 (米)", ge=0)
-    max_elevation_m: float = Field(..., description="最高海拔 (米)")
-    min_elevation_m: float = Field(..., description="最低海拔 (米)")
-    avg_elevation_m: float = Field(..., description="平均海拔 (米)")
+    total_distance_km: float = Field(..., alias="totalDistanceKm", description="总里程 (公里)", gt=0)
+    total_ascent_m: float = Field(..., alias="totalAscentM", description="总累计爬升 (米)", ge=0)
+    total_descent_m: float = Field(..., alias="totalDescentM", description="总累计下降 (米)", ge=0)
+    max_elevation_m: float = Field(..., alias="maxElevationM", description="最高海拔 (米)")
+    min_elevation_m: float = Field(..., alias="minElevationM", description="最低海拔 (米)")
+    avg_elevation_m: float = Field(..., alias="avgElevationM", description="平均海拔 (米)")
 
     # 关键坐标点（用于后续调用天气和交通API）
-    start_point: Point3D = Field(..., description="起步点")
-    end_point: Point3D = Field(..., description="终点（如为环线则同起点）")
-    max_elev_point: Point3D = Field(..., description="最高点（常用于查询极端风寒预报）")
-    min_elev_point: Point3D = Field(..., description="最低点（用于查询最低气温）")
+    start_point: Point3D = Field(..., alias="startPoint", description="起步点")
+    end_point: Point3D = Field(..., alias="endPoint", description="终点（如为环线则同起点）")
+    max_elev_point: Point3D = Field(..., alias="maxElevPoint", description="最高点（常用于查询极端风寒预报）")
+    min_elev_point: Point3D = Field(..., alias="minElevPoint", description="最低点（用于查询最低气温）")
 
     # 核心业务逻辑：大爬升/大下降路段分析
-    terrain_analysis: List[TerrainChange] = Field(default_factory=list, description="危险/高强度路段集合")
+    terrain_analysis: List[TerrainChange] = Field(default_factory=list, alias="terrainAnalysis", description="危险/高强度路段集合")
 
     # 海拔轨迹数据（用于前端可视化）
-    elevation_points: List[ElevationPoint] = Field(default_factory=list, description="抽样海拔轨迹点")
+    elevation_points: List[ElevationPoint] = Field(default_factory=list, alias="elevationPoints", description="抽样海拔轨迹点")
 
     # 地图轨迹数据（GCJ02坐标系，用于高德地图平面图）
     track_points_gcj02: List[TrackPointGCJ02] = Field(
         default_factory=list,
+        alias="trackPointsGcj02",
         description="轨迹点（GCJ02坐标，智能抽样最多200点+关键点）"
     )
 
     # 路线评估指标
-    difficulty_score: float = Field(..., description="难度评分 (0-100)", ge=0, le=100)
-    difficulty_level: Literal["简单", "中等", "困难", "极难"] = Field(..., description="难度等级")
-    estimated_duration_hours: float = Field(..., description="预计用时 (小时)", gt=0)
-    safety_risk: Literal["低风险", "中等风险", "高风险", "极高风险"] = Field(..., description="安全风险等级")
+    difficulty_score: float = Field(..., alias="difficultyScore", description="难度评分 (0-100)", ge=0, le=100)
+    difficulty_level: Literal["简单", "中等", "困难", "极难"] = Field(..., alias="difficultyLevel", description="难度等级")
+    estimated_duration_hours: float = Field(..., alias="estimatedDurationHours", description="预计用时 (小时)", gt=0)
+    safety_risk: Literal["低风险", "中等风险", "高风险", "极高风险"] = Field(..., alias="safetyRisk", description="安全风险等级")
 
     # 轨迹元数据
-    track_name: Optional[str] = Field(None, description="轨迹名称")
-    track_points_count: int = Field(..., description="轨迹点总数", gt=0)
-    track_created_at: datetime = Field(default_factory=datetime.now, description="轨迹创建时间")
+    track_name: Optional[str] = Field(None, alias="trackName", description="轨迹名称")
+    track_points_count: int = Field(..., alias="trackPointsCount", description="轨迹点总数", gt=0)
+    track_created_at: datetime = Field(default_factory=datetime.now, alias="trackCreatedAt", description="轨迹创建时间")
 
     @model_validator(mode='before')
     @classmethod

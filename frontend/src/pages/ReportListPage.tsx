@@ -41,7 +41,7 @@ const ReportListPage: React.FC = () => {
   };
 
   const filteredReports = reports.filter(r =>
-    r.plan_name.toLowerCase().includes(searchQuery.toLowerCase())
+    r.planName.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -94,26 +94,26 @@ const ReportListPage: React.FC = () => {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex-1">
-                  <h3 className="font-bold text-lg text-zinc-900 line-clamp-2">{report.plan_name}</h3>
+                  <h3 className="font-bold text-lg text-zinc-900 line-clamp-2">{report.planName}</h3>
                   <div className="flex items-center gap-2 mt-2 text-xs text-zinc-500">
                     <Calendar size={14} />
-                    <span>{new Date(report.trip_date).toLocaleDateString('zh-CN')}</span>
+                    <span>{new Date(report.tripDate).toLocaleDateString('zh-CN')}</span>
                   </div>
                 </div>
                 <span className={cn(
                   'px-2 py-1 rounded-full text-xs font-medium',
-                  report.overall_rating === '推荐'
+                  report.overallRating === '推荐'
                     ? 'bg-green-50 text-green-700'
-                    : report.overall_rating === '谨慎推荐'
+                    : report.overallRating === '谨慎推荐'
                     ? 'bg-amber-50 text-amber-700'
                     : 'bg-red-50 text-red-700'
                 )}>
-                  {report.overall_rating}
+                  {report.overallRating}
                 </span>
               </div>
               <div className="flex items-center justify-between pt-4 border-t border-[var(--stone)]">
                 <span className="text-xs text-zinc-400">
-                  {new Date(report.created_at).toLocaleString('zh-CN')}
+                  {new Date(report.createdAt).toLocaleString('zh-CN')}
                 </span>
                 <div className="flex items-center gap-2">
                   <Link
