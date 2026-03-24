@@ -42,8 +42,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const tempToken = credentials._token;
       localStorage.setItem('access_token', tempToken);
 
-      const response = await authAPI.getCurrentUser();
-      const userData = response.data;
+      // 响应拦截器已解包，response 直接是用户数据
+      const userData = await authAPI.getCurrentUser() as any;
 
       setToken(tempToken);
       setUser(userData);
@@ -56,7 +56,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ? authAPI.login({ username: credentials.username, password: credentials.password })
       : authAPI.loginWithPhone({ phone: credentials.phone, code: credentials.code })) as any;
 
+    // 响应拦截器已解包，response 直接是 { accessToken, user, ... }
     const { accessToken, user: userData } = response;
+
+    if (!accessToken || !userData) {
+      console.error('登录响应格式错误:', response);
+      throw new Error('登录响应格式错误');
+    }
 
     // 保存到 state
     setToken(accessToken);
@@ -75,8 +81,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const updateUser = useCallback(async () => {
-    const response = await authAPI.getCurrentUser();
-    const userData = response.data;
+    // 响应拦截器已解包，直接是用户数据
+    const userData = await authAPI.getCurrentUser() as any;
     setUser(userData);
     localStorage.setItem('user', JSON.stringify(userData));
   }, []);

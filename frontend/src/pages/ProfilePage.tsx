@@ -7,7 +7,9 @@ import { cn } from '../utils/cn';
 
 const ProfilePage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { quota } = useQuota();
+  const { quota, getTimeUntilReset } = useQuota();
+  const isAdmin = user.role === 'admin';
+  const isQuotaExhausted = quota && quota.remaining === 0;
 
   const handleLogout = () => {
     logout();
@@ -54,35 +56,64 @@ const ProfilePage: React.FC = () => {
       </div>
 
       {/* 额度显示 */}
-      {quota && (
-        <div className="bg-white border border-[var(--stone)] rounded-2xl p-6">
-          <h3 className="font-bold text-zinc-900 mb-4 flex items-center gap-2">
-            <Shield size={18} className="text-[var(--forest)]" />
-            今日额度
-          </h3>
-          <div className="flex items-center gap-4">
-            <div className="flex-1">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-zinc-500">已使用</span>
-                <span className="font-medium text-zinc-900">{quota.used}/{quota.total} 次</span>
-              </div>
-              <div className="h-3 bg-[var(--sand)] rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-[var(--forest)] transition-all"
-                  style={{ width: `${(quota.used / quota.total) * 100}%` }}
-                />
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-2xl font-bold text-[var(--forest)]">{quota.remaining}</div>
-              <div className="text-xs text-zinc-500">剩余次数</div>
+      <div className="bg-white border border-[var(--stone)] rounded-2xl p-6">
+        <h3 className="font-bold text-zinc-900 mb-4 flex items-center gap-2">
+          <Shield size={18} className="text-[var(--forest)]" />
+          今日额度
+        </h3>
+
+        {isAdmin ? (
+          <div className="flex items-center justify-center py-4">
+            <div className="text-center">
+              <div className="text-4xl font-bold text-purple-600">∞</div>
+              <div className="text-sm text-zinc-500 mt-1">管理员无限额度</div>
             </div>
           </div>
-          <p className="text-xs text-zinc-400 mt-3">
-            每日额度于 {new Date(quota.resetAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })} 重置
-          </p>
-        </div>
-      )}
+        ) : quota && (
+          <>
+            <div className="flex items-center gap-4">
+              <div className="flex-1">
+                <div className="flex justify-between text-sm mb-2">
+                  <span className="text-zinc-500">已使用</span>
+                  <span className={cn(
+                    "font-medium",
+                    isQuotaExhausted ? "text-red-600" : "text-zinc-900"
+                  )}>
+                    {quota.used}/{quota.total} 次
+                  </span>
+                </div>
+                <div className="h-3 bg-[var(--sand)] rounded-full overflow-hidden">
+                  <div
+                    className={cn(
+                      "h-full transition-all",
+                      isQuotaExhausted ? "bg-red-500" : "bg-[var(--forest)]"
+                    )}
+                    style={{ width: `${(quota.used / quota.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="text-right">
+                <div className={cn(
+                  "text-2xl font-bold",
+                  isQuotaExhausted ? "text-red-600" : "text-[var(--forest)]"
+                )}>
+                  {quota.remaining}
+                </div>
+                <div className="text-xs text-zinc-500">剩余次数</div>
+              </div>
+            </div>
+            <p className={cn(
+              "text-xs mt-3",
+              isQuotaExhausted ? "text-red-500" : "text-zinc-400"
+            )}>
+              {isQuotaExhausted
+                ? `额度已用完，${getTimeUntilReset()}`
+                : `${getTimeUntilReset()}`
+              }
+            </p>
+          </>
+        )}
+      </div>
 
       {/* 快捷操作 */}
       <div className="bg-white border border-[var(--stone)] rounded-2xl divide-y divide-[var(--stone)]">

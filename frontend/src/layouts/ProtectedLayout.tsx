@@ -7,7 +7,9 @@ import { cn } from '../utils/cn';
 
 const ProtectedLayout: React.FC = () => {
   const { user, logout } = useAuth();
-  const { quota } = useQuota();
+  const { quota, getTimeUntilReset } = useQuota();
+  const isAdmin = user?.role === 'admin';
+  const isQuotaExhausted = quota && quota.remaining === 0;
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
@@ -68,12 +70,28 @@ const ProtectedLayout: React.FC = () => {
             {/* 右侧：额度 + 用户菜单 */}
             <div className="flex items-center gap-4">
               {/* 额度显示 */}
-              {quota && (
-                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-[var(--forest)]/10 rounded-lg">
+              {isAdmin ? (
+                <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg">
                   <span className="text-xs text-zinc-500">今日额度</span>
-                  <span className="text-sm font-bold text-[var(--forest)]">
+                  <span className="text-sm font-bold text-purple-600">∞</span>
+                </div>
+              ) : quota && (
+                <div className={cn(
+                  "hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-lg",
+                  isQuotaExhausted ? "bg-red-50" : "bg-[var(--forest)]/10"
+                )}>
+                  <span className="text-xs text-zinc-500">今日额度</span>
+                  <span className={cn(
+                    "text-sm font-bold",
+                    isQuotaExhausted ? "text-red-600" : "text-[var(--forest)]"
+                  )}>
                     {quota.remaining}/{quota.total}
                   </span>
+                  {isQuotaExhausted && (
+                    <span className="text-xs text-red-500 ml-1">
+                      ({getTimeUntilReset()})
+                    </span>
+                  )}
                 </div>
               )}
 
