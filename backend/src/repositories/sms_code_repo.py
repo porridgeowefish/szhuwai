@@ -49,6 +49,7 @@ class SmsCodeRepository:
         )
         self.session.add(sms_code)
         self.session.flush()
+        self.session.commit()  # 立即提交，确保其他 session 可见
         logger.info(f"创建验证码: {phone}, 场景: {scene}")
         return sms_code
 

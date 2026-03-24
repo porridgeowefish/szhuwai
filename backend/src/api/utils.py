@@ -180,6 +180,9 @@ def handle_api_errors(func: Callable) -> Callable:
             }
             logger.error(f"网络请求异常: {str(e)}")
             raise NetworkError(f"网络错误: {str(e)}", 0, error_details)
+        except APIError:
+            # 预期的业务异常，直接抛出，不记录 ERROR 日志
+            raise
         except Exception as e:
             error_details = {
                 "error_type": str(type(e).__name__),

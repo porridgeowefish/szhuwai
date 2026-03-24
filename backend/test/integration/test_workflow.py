@@ -11,6 +11,7 @@ from src.api.config import APIConfig
 from src.api.weather_client import WeatherClient
 from src.api.map_client import MapClient
 from src.api.search_client import SearchClient
+from src.api.utils import APIError
 
 
 @pytest.mark.integration
@@ -94,11 +95,11 @@ class TestWorkflowIntegration:
         """测试错误处理工作流程"""
         weather_client = WeatherClient(config)
 
-        # Test with invalid location
+        # Test with invalid location - 使用 APIError 模拟业务异常
         with patch.object(weather_client, '_make_request') as mock_request:
-            mock_request.side_effect = Exception("API Error")
+            mock_request.side_effect = APIError("API Error", 500, {})
 
-            with pytest.raises(Exception):
+            with pytest.raises(APIError):
                 weather_client.get_weather_3d("InvalidLocation")
 
 
