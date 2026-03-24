@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { authAPI } from '../lib/api/auth';
-import { User, LoginRequest, LoginResponse } from '../lib/api/types';
+import { User, LoginRequest } from '../lib/api/types';
+import { STORAGE_KEYS } from '../utils/constants';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -18,73 +19,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [token, setToken] = useState<string | null>(null);
   const [isInitialized, setIsInitialized] = useState(false);
 
-  // 初始化：从 localStorage 恢复登录状态
   useEffect(() => {
-    const storedToken = localStorage.getItem('access_token');
-    const storedUser = localStorage.getItem('user');
+    const storedToken = localStorage.getItem(STORAGE_KEYS.ACCESS_TOKEN);
+    const storedUser = localStorage.getItem(STORAGE_KEYS.USER);
 
     if (storedToken && storedUser) {
       try {
         setToken(storedToken);
         setUser(JSON.parse(storedUser));
-      } catch (e) {
-        // 解析失败，清除存储
-        localStorage.removeItem('access_token');
-        localStorage.removeItem('user');
+      } catch {
+        localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+        localStorage.removeItem(STORAGE_KEYS.USER);
       }
     }
     setIsInitialized(true);
   }, []);
 
   const login = useCallback(async (credentials: LoginRequest & { _token?: string }) => {
-    // 如果已提供 token（注册后直接登录），直接使用
     if (credentials._token) {
       const tempToken = credentials._token;
-      localStorage.setItem('access_token', tempToken);
+      localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, tempToken);
 
-      // 响应拦截器已解包，response 直接是用户数据
-      const userData = await authAPI.getCurrentUser() as any;
+      const userData = await authAPI.getCurrentUser() as unknown as User;
 
       setToken(tempToken);
       setUser(userData);
-      localStorage.setItem('user', JSON.stringify(userData));
+      localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
       return;
     }
 
-    // 否则调用登录 API
     const response = await (credentials.username
       ? authAPI.login({ username: credentials.username, password: credentials.password })
-      : authAPI.loginWithPhone({ phone: credentials.phone, code: credentials.code })) as any;
+      : authAPI.loginWithPhone({ phone: credentials.phone!, code: credentials.code! })) as unknown as { accessToken: string; user: User };
 
-    // 响应拦截器已解包，response 直接是 { accessToken, user, ... }
     const { accessToken, user: userData } = response;
 
     if (!accessToken || !userData) {
-      console.error('登录响应格式错误:', response);
       throw new Error('登录响应格式错误');
     }
 
-    // 保存到 state
     setToken(accessToken);
     setUser(userData);
-
-    // 保存到 localStorage
-    localStorage.setItem('access_token', accessToken);
-    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem(STORAGE_KEYS.ACCESS_TOKEN, accessToken);
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
   }, []);
 
   const logout = useCallback(() => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('user');
+    localStorage.removeItem(STORAGE_KEYS.ACCESS_TOKEN);
+    localStorage.removeItem(STORAGE_KEYS.USER);
   }, []);
 
   const updateUser = useCallback(async () => {
-    // 响应拦截器已解包，直接是用户数据
-    const userData = await authAPI.getCurrentUser() as any;
+    const userData = await authAPI.getCurrentUser() as unknown as User;
     setUser(userData);
-    localStorage.setItem('user', JSON.stringify(userData));
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData));
   }, []);
 
   const value: AuthContextType = {
@@ -96,7 +86,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     updateUser,
   };
 
-  // 未初始化时不渲染子组件
   if (!isInitialized) {
     return null;
   }

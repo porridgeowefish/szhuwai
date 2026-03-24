@@ -1,33 +1,33 @@
 import React from 'react';
-import { Link } from 'react-router-dom';
-import { User, Phone, Lock, MapPin, Calendar, Shield } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { Phone, Lock, Calendar, Shield, LogOut } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { useQuota } from '../contexts/QuotaContext';
 import { cn } from '../utils/cn';
+import { getTimeUntilReset } from '../utils/time';
 
 const ProfilePage: React.FC = () => {
   const { user, logout } = useAuth();
-  const { quota, getTimeUntilReset } = useQuota();
-  const isAdmin = user.role === 'admin';
+  const { quota } = useQuota();
+  const navigate = useNavigate();
+  const isAdmin = user?.role === 'admin';
   const isQuotaExhausted = quota && quota.remaining === 0;
 
   const handleLogout = () => {
     logout();
-    window.location.href = '/auth/login';
+    navigate('/auth/login');
   };
 
   if (!user) return null;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* 页面标题 */}
       <div>
         <h1 className="text-3xl font-bold text-zinc-900" style={{ fontFamily: 'Playfair Display, serif' }}>
           个人中心
         </h1>
       </div>
 
-      {/* 用户信息卡片 */}
       <div className="bg-white border border-[var(--stone)] rounded-2xl p-6">
         <div className="flex items-center gap-6">
           <div className="w-20 h-20 rounded-2xl bg-[var(--forest)] flex items-center justify-center text-white text-2xl font-bold">
@@ -55,7 +55,6 @@ const ProfilePage: React.FC = () => {
         </div>
       </div>
 
-      {/* 额度显示 */}
       <div className="bg-white border border-[var(--stone)] rounded-2xl p-6">
         <h3 className="font-bold text-zinc-900 mb-4 flex items-center gap-2">
           <Shield size={18} className="text-[var(--forest)]" />
@@ -108,14 +107,13 @@ const ProfilePage: React.FC = () => {
             )}>
               {isQuotaExhausted
                 ? `额度已用完，${getTimeUntilReset()}`
-                : `${getTimeUntilReset()}`
+                : getTimeUntilReset()
               }
             </p>
           </>
         )}
       </div>
 
-      {/* 快捷操作 */}
       <div className="bg-white border border-[var(--stone)] rounded-2xl divide-y divide-[var(--stone)]">
         <Link
           to="/profile/password"

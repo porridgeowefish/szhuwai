@@ -4,22 +4,24 @@ import { Tent, Home, FileText, Wrench, User, LogOut, Menu, X } from 'lucide-reac
 import { useAuth } from '../contexts/AuthContext';
 import { useQuota } from '../contexts/QuotaContext';
 import { cn } from '../utils/cn';
+import { isActivePath } from '../utils/router';
+import { getTimeUntilReset } from '../utils/time';
+
+const NAVIGATION = [
+  { name: '首页', href: '/', icon: Home },
+  { name: '报告中心', href: '/reports', icon: FileText },
+  { name: '工具', href: '/tools', icon: Wrench },
+  { name: '个人中心', href: '/profile', icon: User },
+] as const;
 
 const ProtectedLayout: React.FC = () => {
   const { user, logout } = useAuth();
-  const { quota, getTimeUntilReset } = useQuota();
+  const { quota } = useQuota();
   const isAdmin = user?.role === 'admin';
   const isQuotaExhausted = quota && quota.remaining === 0;
   const location = useLocation();
   const navigate = useNavigate();
   const [mobileMenuOpen, setMobileMenuOpen] = React.useState(false);
-
-  const navigation = [
-    { name: '首页', href: '/', icon: Home },
-    { name: '报告中心', href: '/reports', icon: FileText },
-    { name: '工具', href: '/tools', icon: Wrench },
-    { name: '个人中心', href: '/profile', icon: User },
-  ];
 
   const handleLogout = () => {
     logout();
@@ -28,11 +30,9 @@ const ProtectedLayout: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[var(--sand)]">
-      {/* 顶部导航栏 */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-white/90 backdrop-blur-md border-b border-[var(--stone)]">
         <div className="max-w-7xl mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
-            {/* Logo + 导航 */}
             <div className="flex items-center gap-8">
               <Link to="/" className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-lg bg-[var(--forest)] flex items-center justify-center">
@@ -43,11 +43,9 @@ const ProtectedLayout: React.FC = () => {
                 </span>
               </Link>
 
-              {/* 桌面导航 */}
               <nav className="hidden lg:flex items-center gap-6">
-                {navigation.map((item) => {
-                  const isActive = location.pathname === item.href ||
-                    (item.href !== '/' && location.pathname.startsWith(item.href));
+                {NAVIGATION.map((item) => {
+                  const isActive = isActivePath(location.pathname, item.href);
                   return (
                     <Link
                       key={item.name}
@@ -67,9 +65,7 @@ const ProtectedLayout: React.FC = () => {
               </nav>
             </div>
 
-            {/* 右侧：额度 + 用户菜单 */}
             <div className="flex items-center gap-4">
-              {/* 额度显示 */}
               {isAdmin ? (
                 <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 bg-purple-50 rounded-lg">
                   <span className="text-xs text-zinc-500">今日额度</span>
@@ -95,7 +91,6 @@ const ProtectedLayout: React.FC = () => {
                 </div>
               )}
 
-              {/* 用户信息 */}
               <div className="flex items-center gap-3">
                 <div className="hidden sm:block text-right">
                   <div className="text-sm font-medium text-zinc-900">{user?.username}</div>
@@ -104,7 +99,6 @@ const ProtectedLayout: React.FC = () => {
                 <div className="w-9 h-9 rounded-full bg-[var(--forest)] flex items-center justify-center text-white font-bold">
                   {user?.username?.charAt(0).toUpperCase()}
                 </div>
-                {/* 桌面端退出按钮 */}
                 <button
                   onClick={handleLogout}
                   className="hidden sm:flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium text-red-600 hover:bg-red-50 transition-colors"
@@ -115,7 +109,6 @@ const ProtectedLayout: React.FC = () => {
                 </button>
               </div>
 
-              {/* 移动端菜单按钮 */}
               <button
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
                 className="lg:hidden p-2 hover:bg-[var(--sand)] rounded-lg"
@@ -125,13 +118,11 @@ const ProtectedLayout: React.FC = () => {
             </div>
           </div>
 
-          {/* 移动端导航 */}
           {mobileMenuOpen && (
             <nav className="lg:hidden py-4 border-t border-[var(--stone)] mt-4">
               <div className="space-y-2">
-                {navigation.map((item) => {
-                  const isActive = location.pathname === item.href ||
-                    (item.href !== '/' && location.pathname.startsWith(item.href));
+                {NAVIGATION.map((item) => {
+                  const isActive = isActivePath(location.pathname, item.href);
                   return (
                     <Link
                       key={item.name}
@@ -162,14 +153,12 @@ const ProtectedLayout: React.FC = () => {
         </div>
       </header>
 
-      {/* 主内容区 */}
       <main className="pt-20 pb-12">
         <div className="max-w-7xl mx-auto px-4">
           <Outlet />
         </div>
       </main>
 
-      {/* Footer */}
       <footer className="border-t border-[var(--stone)] py-8">
         <div className="max-w-7xl mx-auto px-4 text-center">
           <p className="text-xs text-zinc-400">
