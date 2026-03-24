@@ -172,7 +172,7 @@ class TestPhoneAuthFlow:
         assert data["code"] == 200
         assert data["data"]["user"]["username"] is None
 
-    def test_phone_login_success(self, client: TestClient, mock_sms):
+    def test_phone_login_success(self, client: TestClient, mock_sms, create_test_user):
         """测试手机号登录成功"""
         # 使用唯一手机号进行注册
         timestamp = int(time.time() * 1000)
@@ -194,22 +194,15 @@ class TestPhoneAuthFlow:
         login_phone_suffix = (timestamp + 1) % 10**8
         login_phone = f"138{login_phone_suffix:08d}"
 
-        # 先注册登录用的手机号
-        client.post("/api/v1/auth/sms/send", json={
-            "phone": login_phone,
-            "scene": "register"
-        })
-        login_reg_code = mock_sms.get_sent_code(login_phone, "register")
-        client.post("/api/v1/auth/sms/register", json={
-            "phone": login_phone,
-            "code": login_reg_code
-        })
+        # 直接在数据库中创建登录用户（避免 SMS 冷却时间）
+        create_test_user(phone=login_phone, password="Phone@123")
 
         # 发送登录验证码
-        client.post("/api/v1/auth/sms/send", json={
+        send_response = client.post("/api/v1/auth/sms/send", json={
             "phone": login_phone,
             "scene": "login"
         })
+        assert send_response.status_code == 200
 
         # 获取登录验证码并登录
         login_code = mock_sms.get_sent_code(login_phone, "login")
@@ -226,7 +219,7 @@ class TestPhoneAuthFlow:
         assert data["message"] == "登录成功"
         assert "accessToken" in data["data"]
 
-    def test_complete_phone_flow(self, client: TestClient, mock_sms):
+    def test_complete_phone_flow(self, client: TestClient, mock_sms, create_test_user):
         """测试完整的手机号注册登录流程"""
         timestamp = int(time.time() * 1000)
 
@@ -254,17 +247,8 @@ class TestPhoneAuthFlow:
         login_phone_suffix = (timestamp + 1) % 10**8
         login_phone = f"139{login_phone_suffix:08d}"
 
-        # 先注册登录用的手机号
-        client.post("/api/v1/auth/sms/send", json={
-            "phone": login_phone,
-            "scene": "register"
-        })
-        login_reg_code = mock_sms.get_sent_code(login_phone, "register")
-        client.post("/api/v1/auth/sms/register", json={
-            "phone": login_phone,
-            "code": login_reg_code,
-            "password": "Phone@123"
-        })
+        # 直接在数据库中创建登录用户（避免 SMS 冷却时间）
+        create_test_user(phone=login_phone, password="Phone@123")
 
         # 4. 发送登录验证码
         login_send_response = client.post("/api/v1/auth/sms/send", json={

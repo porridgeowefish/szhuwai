@@ -59,7 +59,10 @@ def create_test_engine_and_session():
 
 
 def _get_test_db():
-    """获取测试数据库会话（用于替代 get_db）"""
+    """获取测试数据库会话（用于替代 get_db）
+
+    注意：为了兼容使用 next(get_db()) 的代码，会话会在每次操作后自动提交。
+    """
     if _test_session_factory is None:
         create_test_engine_and_session()
 
@@ -104,12 +107,9 @@ def setup_test_database():
     print("[conftest] setup_test_database cleanup done")
 
 
-@pytest.fixture(scope="function", autouse=True)
-def clean_database():
-    """每个测试后清理数据库"""
+def _clean_test_database():
+    """清理测试数据库的辅助函数"""
     global _test_reports, _test_report_counter
-    yield
-    # 清理所有表数据
     if _test_session_factory:
         session = _test_session_factory()
         try:
@@ -118,10 +118,26 @@ def clean_database():
             for table in reversed(Base.metadata.sorted_tables):
                 session.execute(table.delete())
             session.commit()
+        except Exception:
+            session.rollback()
+            raise
         finally:
             session.close()
     # 清理测试报告
     _test_reports.clear()
+    _test_report_counter = 0
+
+
+@pytest.fixture(scope="function", autouse=True)
+def clean_database():
+    """每个测试前后清理数据库"""
+    # 测试前清理（确保干净状态）
+    _clean_test_database()
+
+    yield
+
+    # 测试后清理
+    _clean_test_database()
     _test_report_counter = 0
 
 
@@ -142,6 +158,9 @@ def client(mocker) -> TestClient:
     """创建 FastAPI 测试客户端"""
     from main import app
     from src.infrastructure.aliyun_sms_client import SmsSendResult
+
+    # 清理数据库（确保干净状态）
+    _clean_test_database()
 
     # 全局验证码存储
     global _test_sms_codes_by_key, _test_sms_codes_latest, _test_reports, _test_report_counter, _template_to_scene
@@ -514,11 +533,16 @@ def auth_headers(client: TestClient, test_user_data: dict) -> dict:
     自动注册并登录用户，返回包含 Token 的请求头。
     """
     # 注册
-    client.post("/api/v1/auth/register", json=test_user_data)
+    reg_response = client.post("/api/v1/auth/register", json=test_user_data)
+    assert reg_response.status_code == 201, f"注册失败: {reg_response.json()}"
 
     # 登录
     response = client.post("/api/v1/auth/login", json=test_user_data)
     data = response.json()
+
+    # 检查登录是否成功
+    if data.get("code") != 200 or data.get("data") is None:
+        raise AssertionError(f"登录失败: status={response.status_code}, response={data}")
 
     token = data["data"]["accessToken"]
     return {"Authorization": f"Bearer {token}"}

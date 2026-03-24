@@ -275,7 +275,7 @@ class TestFullFlow:
         reports_data2 = reports_response2.json()
         assert len(reports_data2["data"]["list"]) == 0
 
-    def test_phone_user_journey(self, client: TestClient, mock_sms, tmp_path):
+    def test_phone_user_journey(self, client: TestClient, mock_sms, create_test_user, tmp_path):
         """测试手机号用户完整流程"""
         # 使用时间戳确保手机号和用户名唯一性
         timestamp = int(time.time() * 1000)
@@ -304,24 +304,15 @@ class TestFullFlow:
         login_phone_suffix = (timestamp + 1) % 10**8
         login_phone = f"139{login_phone_suffix:08d}"
 
-        # 先注册登录用的手机号
-        client.post("/api/v1/auth/sms/send", json={
-            "phone": login_phone,
-            "scene": "register"
-        })
-        login_reg_code = mock_sms.get_sent_code(login_phone, "register")
-        client.post("/api/v1/auth/sms/register", json={
-            "phone": login_phone,
-            "code": login_reg_code,
-            "password": "Phone@123",
-            "username": f"phlgn{str(timestamp)[-6:]}"
-        })
+        # 直接在数据库中创建登录用户（避免 SMS 冷却时间）
+        create_test_user(phone=login_phone, password="Phone@123", username=f"phlgn{str(timestamp)[-6:]}")
 
         # 发送登录验证码
-        client.post("/api/v1/auth/sms/send", json={
+        send_login_response = client.post("/api/v1/auth/sms/send", json={
             "phone": login_phone,
             "scene": "login"
         })
+        assert send_login_response.status_code == 200
         login_code = mock_sms.get_sent_code(login_phone, "login")
         login_response = client.post("/api/v1/auth/sms/login", json={
             "phone": login_phone,
@@ -476,8 +467,12 @@ class TestFullFlow:
         assert quota_data["data"]["total"] == -1  # 管理员无限制
         assert quota_data["data"]["remaining"] == -1
 
-    def test_report_management_flow(self, client: TestClient, auth_headers: dict, tmp_path):
+    def test_report_management_flow(self, client: TestClient, create_test_user, tmp_path):
         """测试报告管理流程"""
+        # 创建用户并获取认证头
+        create_test_user(username="reportuser", password="Report@123")
+        auth_headers = _get_auth_headers(client, "reportuser", "Report@123")
+
         # 1. 生成计划创建报告
         kml_path = _create_test_kml_file(tmp_path)
         mock_plan = _mock_plan_response()
@@ -500,6 +495,7 @@ class TestFullFlow:
                     files={"file": ("test.kml", f, "application/vnd.google-earth.kml+xml")}
                 )
 
+        assert plan_response.status_code == 200, f"Expected 200, got {plan_response.status_code}: {plan_response.json()}"
         report_id = plan_response.json()["report_id"]
 
         # 2. 查看报告列表

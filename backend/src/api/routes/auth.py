@@ -9,6 +9,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from src.api.config import api_config
 from src.api.routes.common import ApiResponse, ErrorCodes, LoginData, UserWithToken, get_current_user
@@ -43,9 +44,8 @@ class UnbindPhoneRequest(BaseModel):
 
 
 # ============ 依赖注入 ============
-def get_auth_service() -> AuthService:
+def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
     """获取认证服务实例"""
-    db = next(get_db())
     user_repo = UserRepository(db)
 
     sms_code_repo = SmsCodeRepository(db)
