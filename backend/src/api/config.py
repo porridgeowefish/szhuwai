@@ -95,6 +95,20 @@ class APIConfig(BaseModel):
         description="LLM API 超时时间（秒）"
     )
 
+    # Agent 配置
+    AGENT_SESSION_TTL: int = Field(
+        default=86400, ge=3600,
+        description="会话历史 TTL（秒）"
+    )
+    AGENT_MAX_HISTORY_TURNS: int = Field(
+        default=20, ge=2, le=50,
+        description="会话保留的最大对话轮数"
+    )
+    AGENT_SUMMARY_THRESHOLD: int = Field(
+        default=10, ge=4,
+        description="触发摘要压缩的对话轮数阈值"
+    )
+
     # MySQL 配置
     MYSQL_HOST: str = Field(
         default="localhost",
