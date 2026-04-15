@@ -26,6 +26,7 @@ from src.api.routes import (
     reports_router,
     users_router,
 )
+from src.api.routes.chat import router as chat_router
 
 # 导入配置和基础设施
 from src.api.config import api_config
@@ -33,6 +34,7 @@ from src.infrastructure.mysql_client import init_mysql_client
 from src.infrastructure.jwt_handler import init_jwt_handler
 from src.infrastructure.aliyun_sms_client import init_aliyun_sms_client
 from src.infrastructure.mongo_client import init_mongo_client
+from src.infrastructure.redis_client import init_redis_client
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -97,6 +99,13 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"MongoDB 客户端初始化失败: {e}")
 
+    # 初始化 Redis 客户端
+    try:
+        init_redis_client(api_config)
+        logger.info("Redis 客户端初始化成功")
+    except Exception as e:
+        logger.warning(f"Redis 客户端初始化失败: {e}")
+
 # ============ 注册模块化路由 ============
 app.include_router(track_router, prefix=f"/api/{API_VERSION}")
 app.include_router(weather_router, prefix=f"/api/{API_VERSION}")
@@ -108,6 +117,7 @@ app.include_router(auth_router, prefix=f"/api/{API_VERSION}")
 app.include_router(quota_router, prefix=f"/api/{API_VERSION}")
 app.include_router(reports_router, prefix=f"/api/{API_VERSION}")
 app.include_router(users_router, prefix=f"/api/{API_VERSION}")
+app.include_router(chat_router, prefix=f"/api/{API_VERSION}")
 
 
 @app.get("/")
