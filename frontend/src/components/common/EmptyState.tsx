@@ -39,7 +39,7 @@ const EmptyState: React.FC<EmptyStateProps> = ({
       <Icon size={48} className="mx-auto text-zinc-300 mb-4" />
       <p className="text-zinc-500 font-medium">{title}</p>
       {description && (
-        <p className="text-sm text-zinc-400 mt-1">{description}</p>
+        <p className="text-sm text-zinc-400 mt-1 max-w-md mx-auto">{description}</p>
       )}
       {action && (
         action.to ? (

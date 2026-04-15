@@ -15,6 +15,7 @@ import { calculateWindChill, windScaleToSpeed, getWindChillRisk } from '../utils
 import { exportToPDF } from '../utils/pdf';
 import { cn } from '../utils/cn';
 import { reportsAPI } from '../lib/api/reports';
+import { ReportDocument } from '../lib/api/types';
 import EmptyState from '../components/common/EmptyState';
 import { RouteBrief } from '../components/RouteBrief';
 import { TrackDetailSection } from '../components/TrackDetailSection';
@@ -94,18 +95,26 @@ const ReportDetailPage: React.FC = () => {
   const statePlan = location.state?.plan as PlanData | null;
   const [plan, setPlan] = useState<PlanData | null>(statePlan);
   const [loading, setLoading] = useState(!statePlan);
+  const [fetchError, setFetchError] = useState(false);
   const [weatherTab, setWeatherTab] = useState<'overview' | 'hourly'>('overview');
 
   // 当没有 route state 时，从 API 获取报告数据
   useEffect(() => {
     if (!statePlan && id) {
       setLoading(true);
+      setFetchError(false);
       reportsAPI.get(id)
         .then((data) => {
-          setPlan(data as unknown as PlanData);
+          // 响应拦截器已解包 response.data.data，运行时拿到 ReportDocument
+          const report = data as unknown as ReportDocument;
+          if (report.content) {
+            setPlan(report.content as unknown as PlanData);
+          } else {
+            setFetchError(true);
+          }
         })
-        .catch((err) => {
-          console.error('获取报告失败:', err);
+        .catch(() => {
+          setFetchError(true);
         })
         .finally(() => {
           setLoading(false);
@@ -134,50 +143,47 @@ const ReportDetailPage: React.FC = () => {
     return items;
   }, [plan]);
 
-  // IntersectionObserver 实现 scroll spy
+  // IntersectionObserver 实现 scroll spy（单一 observer 监听所有 section）
   useEffect(() => {
     if (!plan || tocItems.length === 0) return;
 
-    const observers: IntersectionObserver[] = [];
     const visibleSections = new Set<string>();
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            visibleSections.add(entry.target.id);
+          } else {
+            visibleSections.delete(entry.target.id);
+          }
+        });
+        // 选择最靠近顶部的可见 section
+        if (visibleSections.size > 0) {
+          let topId = '';
+          let topY = Infinity;
+          visibleSections.forEach((sid) => {
+            const sel = document.getElementById(sid);
+            if (sel) {
+              const rect = sel.getBoundingClientRect();
+              if (rect.top < topY) {
+                topY = rect.top;
+                topId = sid;
+              }
+            }
+          });
+          if (topId) setActiveSection(topId);
+        }
+      },
+      { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
+    );
 
     tocItems.forEach((item) => {
       const el = document.getElementById(item.id);
-      if (!el) return;
-
-      const observer = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            if (entry.isIntersecting) {
-              visibleSections.add(item.id);
-            } else {
-              visibleSections.delete(item.id);
-            }
-          });
-          // 选择最靠近顶部的可见 section
-          if (visibleSections.size > 0) {
-            let topId = item.id;
-            let topY = Infinity;
-            visibleSections.forEach((sid) => {
-              const sel = document.getElementById(sid);
-              if (sel) {
-                const rect = sel.getBoundingClientRect();
-                if (rect.top < topY) {
-                  topY = rect.top;
-                  topId = sid;
-                }
-              }
-            });
-            setActiveSection(topId);
-          }
-        },
-        { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
-      );
-      observer.observe(el);
-      observers.push(observer);
+      if (el) observer.observe(el);
     });
 
-    return () => observers.forEach((o) => o.disconnect());
+    return () => observer.disconnect();
   }, [plan, tocItems]);
 
   // 平滑滚动到指定 section
@@ -196,14 +202,14 @@ const ReportDetailPage: React.FC = () => {
     );
   }
 
-  if (!plan) {
+  if (fetchError || !plan) {
     return (
       <div className="min-h-screen bg-[var(--sand)] flex items-center justify-center">
         <EmptyState
           icon={FileText}
-          title="报告不存在"
-          description="该报告可能已被删除或链接无效"
-          action={{ label: '返回首页', onClick: () => navigate('/') }}
+          title={fetchError ? '加载失败' : '报告不存在'}
+          description={fetchError ? '网络异常或服务器错误，请稍后重试' : '该报告可能已被删除或链接无效'}
+          action={{ label: '返回报告列表', onClick: () => navigate('/reports') }}
           className="border-none py-0"
         />
       </div>
@@ -241,7 +247,6 @@ const ReportDetailPage: React.FC = () => {
                     await exportToPDF(mainContentRef.current, plan.planName);
                   } catch (err) {
                     console.error('PDF导出错误:', err);
-                    alert('PDF导出失败');
                   }
                 }
               }}
@@ -310,7 +315,7 @@ const ReportDetailPage: React.FC = () => {
         <main className="flex-1 min-w-0 space-y-8">
           <div ref={mainContentRef} className="pdf-export-container space-y-8">
           {/* 1. 线路简介 */}
-          <section id="section-route-brief">
+          <section id="section-route-brief" className="scroll-mt-32 lg:scroll-mt-24">
             <RouteBrief
               planName={plan.planName}
               trackDetail={plan.trackDetail}
@@ -320,14 +325,14 @@ const ReportDetailPage: React.FC = () => {
 
           {/* 2. 线路详情 */}
           {plan.trackDetail && (
-            <section id="section-track-detail">
+            <section id="section-track-detail" className="scroll-mt-32 lg:scroll-mt-24">
               <SectionTitle title="线路详情" icon={Mountain} colorClass="text-[var(--forest)]" />
               <TrackDetailSection trackDetail={plan.trackDetail} />
             </section>
           )}
 
           {/* 3. 沿途风光 */}
-          <section id="section-scenic">
+          <section id="section-scenic" className="scroll-mt-32 lg:scroll-mt-24">
             <SectionTitle title="沿途风光" icon={MapIcon} colorClass="text-indigo-600" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {plan.scenicSpots.map((spot, idx) => (
@@ -369,7 +374,7 @@ const ReportDetailPage: React.FC = () => {
 
           {/* 4. 交通方案 */}
           {plan.transportScheme && (
-            <section id="section-transport">
+            <section id="section-transport" className="scroll-mt-32 lg:scroll-mt-24">
               <SectionTitle title="交通方案" icon={MapPin} colorClass="text-amber-600" />
               <div className="space-y-4">
                 {plan.transportScheme.summary && (
@@ -435,7 +440,7 @@ const ReportDetailPage: React.FC = () => {
           )}
 
           {/* 5. 安全评估 */}
-          <section id="section-safety">
+          <section id="section-safety" className="scroll-mt-32 lg:scroll-mt-24">
             <SectionTitle title="安全与应急模块" icon={ShieldAlert} colorClass="text-rose-600" />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="lg:col-span-2 space-y-6">
@@ -504,7 +509,7 @@ const ReportDetailPage: React.FC = () => {
           </section>
 
           {/* 6. 天气预报 */}
-          <section id="section-weather">
+          <section id="section-weather" className="scroll-mt-32 lg:scroll-mt-24">
             <SectionTitle title="动态天气看板" icon={CloudSun} colorClass="text-blue-600" />
             <Card className="p-0 overflow-hidden">
               <div className="flex border-b border-[var(--stone)]">
@@ -654,7 +659,7 @@ const ReportDetailPage: React.FC = () => {
           </section>
 
           {/* 7. 装备建议 */}
-          <section id="section-equipment">
+          <section id="section-equipment" className="scroll-mt-32 lg:scroll-mt-24">
             <SectionTitle title="行前准备" icon={Backpack} colorClass="text-[var(--earth-dark)]" />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">

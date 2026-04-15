@@ -8,8 +8,6 @@ import {
   ArrowRight,
   Mountain,
   Compass,
-  Clock,
-  BarChart3,
   CheckCircle2,
   Wrench,
 } from 'lucide-react';
@@ -23,8 +21,6 @@ interface ToolInfo {
   icon: React.ElementType;
   color: string;
   gradient: string;
-  usageCount: number;
-  lastUsed: string | null;
   status: 'available' | 'maintenance';
 }
 
@@ -38,8 +34,6 @@ const ToolsPage: React.FC = () => {
       icon: Route,
       color: 'bg-emerald-500',
       gradient: 'from-emerald-500 to-teal-600',
-      usageCount: 128,
-      lastUsed: '2 小时前',
       status: 'available',
     },
     {
@@ -50,8 +44,6 @@ const ToolsPage: React.FC = () => {
       icon: Cloud,
       color: 'bg-blue-500',
       gradient: 'from-blue-500 to-cyan-600',
-      usageCount: 256,
-      lastUsed: '30 分钟前',
       status: 'available',
     },
     {
@@ -62,8 +54,6 @@ const ToolsPage: React.FC = () => {
       icon: Navigation,
       color: 'bg-purple-500',
       gradient: 'from-purple-500 to-violet-600',
-      usageCount: 89,
-      lastUsed: '昨天',
       status: 'available',
     },
     {
@@ -74,8 +64,6 @@ const ToolsPage: React.FC = () => {
       icon: Search,
       color: 'bg-orange-500',
       gradient: 'from-orange-500 to-red-600',
-      usageCount: 45,
-      lastUsed: null,
       status: 'available',
     },
   ];
@@ -154,27 +142,13 @@ const ToolsPage: React.FC = () => {
                 <p className="text-sm text-zinc-600 mb-1">
                   {tool.description}
                 </p>
-                {/* hover 时显示更多描述 */}
+                {/* hover 时显示更多描述（移动端始终可见） */}
                 <p className={cn(
                   'text-xs text-zinc-400 leading-relaxed overflow-hidden transition-all duration-300',
-                  'max-h-0 group-hover:max-h-20 group-hover:mt-2 opacity-0 group-hover:opacity-100'
+                  'max-h-20 mt-2 lg:max-h-0 lg:group-hover:max-h-20 lg:group-hover:mt-2 lg:opacity-0 lg:group-hover:opacity-100'
                 )}>
                   {tool.extendedDescription}
                 </p>
-
-                {/* 使用统计 */}
-                <div className="flex items-center gap-4 mt-3 pt-3 border-t border-[var(--stone)]">
-                  <span className="flex items-center gap-1 text-xs text-zinc-400">
-                    <BarChart3 size={12} />
-                    使用 {tool.usageCount} 次
-                  </span>
-                  {tool.lastUsed && (
-                    <span className="flex items-center gap-1 text-xs text-zinc-400">
-                      <Clock size={12} />
-                      {tool.lastUsed}
-                    </span>
-                  )}
-                </div>
 
                 {/* 箭头指示 */}
                 {!isMaintenance && (

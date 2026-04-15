@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Phone, Lock, Calendar, Shield, LogOut, Clock, Smartphone, SmartphoneNfc,
@@ -9,6 +9,8 @@ import { useQuota } from '../contexts/QuotaContext';
 import { cn } from '../utils/cn';
 import { getTimeUntilReset } from '../utils/time';
 import { authAPI } from '../lib/api/auth';
+
+const PHONE_REGEX = /^1[3-9]\d{9}$/;
 
 /** 手机号脱敏：中间4位替换为 **** */
 function maskPhone(phone: string | undefined | null): string {
@@ -59,6 +61,15 @@ const ProfilePage: React.FC = () => {
   const [smsCooldown, setSmsCooldown] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [bindError, setBindError] = useState('');
+  const [phoneError, setPhoneError] = useState('');
+  const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // 组件卸载时清理计时器
+  useEffect(() => {
+    return () => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+    };
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -70,15 +81,24 @@ const ProfilePage: React.FC = () => {
     try {
       if (bindModal === 'bind') {
         if (!phoneInput) return;
+        if (!PHONE_REGEX.test(phoneInput)) {
+          setPhoneError('请输入正确的手机号');
+          return;
+        }
+        setPhoneError('');
         await authAPI.sendSms(phoneInput, 'bind');
       } else {
         if (!user?.phone) return;
         await authAPI.sendSms(user.phone, 'unbind');
       }
       setSmsCooldown(60);
-      const timer = setInterval(() => {
+      if (countdownRef.current) clearInterval(countdownRef.current);
+      countdownRef.current = setInterval(() => {
         setSmsCooldown(prev => {
-          if (prev <= 1) { clearInterval(timer); return 0; }
+          if (prev <= 1) {
+            if (countdownRef.current) clearInterval(countdownRef.current);
+            return 0;
+          }
           return prev - 1;
         });
       }, 1000);
@@ -215,7 +235,7 @@ const ProfilePage: React.FC = () => {
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-500",
-                  isQuotaExhausted ? "bg-red-500" : usedPercent > 80 ? "bg-amber-500" : "bg-[var(--forest)]"
+                  isQuotaExhausted ? "bg-red-500" : usedPercent > 90 ? "bg-amber-500" : "bg-[var(--forest)]"
                 )}
                 style={{ width: `${Math.min(usedPercent, 100)}%` }}
               />
@@ -271,13 +291,16 @@ const ProfilePage: React.FC = () => {
               {bindModal === 'bind' ? '绑定手机号' : '解绑手机号'}
             </h4>
             {bindModal === 'bind' && (
-              <input
-                type="tel"
-                value={phoneInput}
-                onChange={(e) => setPhoneInput(e.target.value)}
-                placeholder="请输入手机号"
-                className="w-full px-4 py-2 rounded-xl input-nature text-sm"
-              />
+              <>
+                <input
+                  type="tel"
+                  value={phoneInput}
+                  onChange={(e) => { setPhoneInput(e.target.value.replace(/\D/g, '').slice(0, 11)); setPhoneError(''); }}
+                  placeholder="请输入手机号"
+                  className="w-full px-4 py-2 rounded-xl input-nature text-sm"
+                />
+                {phoneError && <p className="text-xs text-red-500">{phoneError}</p>}
+              </>
             )}
             <div className="flex gap-2">
               <input
