@@ -48,3 +48,9 @@ alibabacloud-tea-util>=0.3.12
 # Code quality
 ruff>=0.3.0
 mypy>=1.8.0
+
+# Agent 架构
+langgraph>=0.2.0
+langchain-core>=0.3.0
+langchain-openai>=0.2.0
+sse-starlette>=2.0.0
