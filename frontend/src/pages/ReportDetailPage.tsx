@@ -1,10 +1,10 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ShieldAlert, CloudSun, MapPin, Backpack, Navigation, PhoneCall, Clock,
   Thermometer, Wind, Droplets, Sun, Eye, AlertTriangle, CheckCircle2, Info,
   Mountain, ArrowUp, ArrowDown, Cloud, Timer, Gauge, Trees, Landmark,
-  Snowflake, Download, Tent, Map as MapIcon
+  Snowflake, Download, Tent, Map as MapIcon, List, FileText
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
@@ -14,6 +14,8 @@ import { PlanData, SafetyIssue, EquipmentItem, TransitRoute } from '../types';
 import { calculateWindChill, windScaleToSpeed, getWindChillRisk } from '../utils/weather';
 import { exportToPDF } from '../utils/pdf';
 import { cn } from '../utils/cn';
+import { reportsAPI } from '../lib/api/reports';
+import EmptyState from '../components/common/EmptyState';
 import { RouteBrief } from '../components/RouteBrief';
 import { TrackDetailSection } from '../components/TrackDetailSection';
 
@@ -74,28 +76,136 @@ const Badge = ({ children, variant = 'default' }: {
   );
 };
 
+// 目录导航项配置
+interface TocItem {
+  id: string;
+  label: string;
+  icon: React.ElementType;
+}
+
 const ReportDetailPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
   const mainContentRef = useRef<HTMLDivElement>(null);
+  const [activeSection, setActiveSection] = useState<string>('');
 
   // 从路由 state 获取计划数据，或从 API 获取
-  const plan = location.state?.plan as PlanData | null;
+  const statePlan = location.state?.plan as PlanData | null;
+  const [plan, setPlan] = useState<PlanData | null>(statePlan);
+  const [loading, setLoading] = useState(!statePlan);
   const [weatherTab, setWeatherTab] = useState<'overview' | 'hourly'>('overview');
+
+  // 当没有 route state 时，从 API 获取报告数据
+  useEffect(() => {
+    if (!statePlan && id) {
+      setLoading(true);
+      reportsAPI.get(id)
+        .then((data) => {
+          setPlan(data as unknown as PlanData);
+        })
+        .catch((err) => {
+          console.error('获取报告失败:', err);
+        })
+        .finally(() => {
+          setLoading(false);
+        });
+    }
+  }, [id, statePlan]);
+
+  // 根据实际内容动态生成目录项
+  const tocItems = useMemo<TocItem[]>(() => {
+    if (!plan) return [];
+    const items: TocItem[] = [
+      { id: 'section-route-brief', label: '线路简介', icon: Navigation },
+      { id: 'section-scenic', label: '沿途风光', icon: MapIcon },
+    ];
+    if (plan.trackDetail) {
+      items.push({ id: 'section-track-detail', label: '线路详情', icon: Mountain });
+    }
+    if (plan.transportScheme) {
+      items.push({ id: 'section-transport', label: '交通方案', icon: MapPin });
+    }
+    items.push(
+      { id: 'section-safety', label: '安全评估', icon: ShieldAlert },
+      { id: 'section-weather', label: '天气预报', icon: CloudSun },
+      { id: 'section-equipment', label: '装备清单', icon: Backpack },
+    );
+    return items;
+  }, [plan]);
+
+  // IntersectionObserver 实现 scroll spy
+  useEffect(() => {
+    if (!plan || tocItems.length === 0) return;
+
+    const observers: IntersectionObserver[] = [];
+    const visibleSections = new Set<string>();
+
+    tocItems.forEach((item) => {
+      const el = document.getElementById(item.id);
+      if (!el) return;
+
+      const observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            if (entry.isIntersecting) {
+              visibleSections.add(item.id);
+            } else {
+              visibleSections.delete(item.id);
+            }
+          });
+          // 选择最靠近顶部的可见 section
+          if (visibleSections.size > 0) {
+            let topId = item.id;
+            let topY = Infinity;
+            visibleSections.forEach((sid) => {
+              const sel = document.getElementById(sid);
+              if (sel) {
+                const rect = sel.getBoundingClientRect();
+                if (rect.top < topY) {
+                  topY = rect.top;
+                  topId = sid;
+                }
+              }
+            });
+            setActiveSection(topId);
+          }
+        },
+        { rootMargin: '-80px 0px -60% 0px', threshold: 0 }
+      );
+      observer.observe(el);
+      observers.push(observer);
+    });
+
+    return () => observers.forEach((o) => o.disconnect());
+  }, [plan, tocItems]);
+
+  // 平滑滚动到指定 section
+  const scrollToSection = useCallback((sectionId: string) => {
+    const el = document.getElementById(sectionId);
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[var(--sand)] flex items-center justify-center">
+        <div className="w-10 h-10 border-2 border-[var(--stone)] border-t-[var(--forest)] rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   if (!plan) {
     return (
       <div className="min-h-screen bg-[var(--sand)] flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-lg font-bold text-zinc-900 mb-2">报告不存在</p>
-          <button
-            onClick={() => navigate('/')}
-            className="btn-forest px-6 py-2 rounded-lg text-white"
-          >
-            返回首页
-          </button>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title="报告不存在"
+          description="该报告可能已被删除或链接无效"
+          action={{ label: '返回首页', onClick: () => navigate('/') }}
+          className="border-none py-0"
+        />
       </div>
     );
   }
@@ -103,12 +213,6 @@ const ReportDetailPage: React.FC = () => {
   const getRatingVariant = (rating: string) => {
     if (rating === '推荐') return 'success';
     if (rating === '谨慎推荐') return 'warning';
-    return 'error';
-  };
-
-  const getRiskVariant = (level: string) => {
-    if (level === '低') return 'success';
-    if (level === '中') return 'warning';
     return 'error';
   };
 
@@ -149,10 +253,64 @@ const ReportDetailPage: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        <div ref={mainContentRef} className="pdf-export-container space-y-8">
+      {/* 移动端横向目录 */}
+      <div className="lg:hidden sticky top-[73px] z-40 bg-white/95 backdrop-blur-sm border-b border-[var(--stone)]">
+        <div className="max-w-5xl mx-auto px-4 py-2 flex gap-1 overflow-x-auto scrollbar-none">
+          {tocItems.map((item) => {
+            const Icon = item.icon;
+            return (
+              <button
+                key={item.id}
+                onClick={() => scrollToSection(item.id)}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium whitespace-nowrap transition-colors shrink-0',
+                  activeSection === item.id
+                    ? 'bg-[var(--forest)]/10 text-[var(--forest)]'
+                    : 'text-zinc-500 hover:text-zinc-700 hover:bg-zinc-100'
+                )}
+              >
+                <Icon size={12} />
+                {item.label}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="max-w-5xl mx-auto px-4 py-8 flex gap-8">
+        {/* 桌面端侧边目录 */}
+        <aside className="hidden lg:block w-48 shrink-0">
+          <nav className="sticky top-24 space-y-1">
+            <div className="flex items-center gap-2 px-3 py-2 text-xs font-bold text-zinc-400 uppercase tracking-widest">
+              <List size={14} />
+              目录
+            </div>
+            {tocItems.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => scrollToSection(item.id)}
+                  className={cn(
+                    'w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all text-left',
+                    activeSection === item.id
+                      ? 'bg-[var(--forest)]/10 text-[var(--forest)] font-medium border-l-2 border-[var(--forest)]'
+                      : 'text-zinc-500 hover:text-zinc-700 hover:bg-white border-l-2 border-transparent'
+                  )}
+                >
+                  <Icon size={14} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+        </aside>
+
+        {/* 主内容 */}
+        <main className="flex-1 min-w-0 space-y-8">
+          <div ref={mainContentRef} className="pdf-export-container space-y-8">
           {/* 1. 线路简介 */}
-          <section>
+          <section id="section-route-brief">
             <RouteBrief
               planName={plan.planName}
               trackDetail={plan.trackDetail}
@@ -162,14 +320,14 @@ const ReportDetailPage: React.FC = () => {
 
           {/* 2. 线路详情 */}
           {plan.trackDetail && (
-            <section>
+            <section id="section-track-detail">
               <SectionTitle title="线路详情" icon={Mountain} colorClass="text-[var(--forest)]" />
               <TrackDetailSection trackDetail={plan.trackDetail} />
             </section>
           )}
 
           {/* 3. 沿途风光 */}
-          <section>
+          <section id="section-scenic">
             <SectionTitle title="沿途风光" icon={MapIcon} colorClass="text-indigo-600" />
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {plan.scenicSpots.map((spot, idx) => (
@@ -211,7 +369,7 @@ const ReportDetailPage: React.FC = () => {
 
           {/* 4. 交通方案 */}
           {plan.transportScheme && (
-            <section>
+            <section id="section-transport">
               <SectionTitle title="交通方案" icon={MapPin} colorClass="text-amber-600" />
               <div className="space-y-4">
                 {plan.transportScheme.summary && (
@@ -277,7 +435,7 @@ const ReportDetailPage: React.FC = () => {
           )}
 
           {/* 5. 安全评估 */}
-          <section>
+          <section id="section-safety">
             <SectionTitle title="安全与应急模块" icon={ShieldAlert} colorClass="text-rose-600" />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <Card className="lg:col-span-2 space-y-6">
@@ -346,7 +504,7 @@ const ReportDetailPage: React.FC = () => {
           </section>
 
           {/* 6. 天气预报 */}
-          <section>
+          <section id="section-weather">
             <SectionTitle title="动态天气看板" icon={CloudSun} colorClass="text-blue-600" />
             <Card className="p-0 overflow-hidden">
               <div className="flex border-b border-[var(--stone)]">
@@ -496,7 +654,7 @@ const ReportDetailPage: React.FC = () => {
           </section>
 
           {/* 7. 装备建议 */}
-          <section>
+          <section id="section-equipment">
             <SectionTitle title="行前准备" icon={Backpack} colorClass="text-[var(--earth-dark)]" />
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2">
@@ -535,6 +693,7 @@ const ReportDetailPage: React.FC = () => {
           </section>
         </div>
       </main>
+      </div>
 
       {/* Footer */}
       <footer className="max-w-5xl mx-auto px-4 py-12 border-t border-[var(--stone)]">

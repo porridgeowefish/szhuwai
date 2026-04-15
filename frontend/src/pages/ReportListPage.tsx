@@ -4,6 +4,7 @@ import { FileText, Trash2, Calendar, Search, AlertTriangle, Loader2 } from 'luci
 import { reportsAPI } from '../lib/api/reports';
 import { ReportDocument, PaginatedResponse } from '../lib/api/types';
 import { cn } from '../utils/cn';
+import EmptyState from '../components/common/EmptyState';
 
 const ReportListPage: React.FC = () => {
   const [reports, setReports] = useState<ReportDocument[]>([]);
@@ -90,17 +91,16 @@ const ReportListPage: React.FC = () => {
           <div className="w-8 h-8 border-2 border-[var(--stone)] border-t-[var(--forest)] rounded-full animate-spin" />
         </div>
       ) : filteredReports.length === 0 ? (
-        <div className="text-center py-16 border-2 border-dashed border-[var(--stone)] rounded-2xl">
-          <FileText size={48} className="mx-auto text-zinc-300 mb-4" />
-          <p className="text-zinc-500 font-medium">还没有报告</p>
-          <p className="text-sm text-zinc-400 mt-1">去首页生成您的第一份计划吧</p>
-          <Link
-            to="/"
-            className="inline-block mt-4 px-6 py-2 btn-forest rounded-xl text-white font-bold"
-          >
-            开始规划
-          </Link>
-        </div>
+        <EmptyState
+          icon={FileText}
+          title={searchQuery ? '未找到匹配的报告' : '还没有报告'}
+          description={searchQuery ? '试试其他搜索关键词' : '去首页生成您的第一份计划吧'}
+          action={
+            searchQuery
+              ? { label: '清空搜索', onClick: () => setSearchQuery('') }
+              : { label: '开始规划', to: '/' }
+          }
+        />
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredReports.map((report) => (

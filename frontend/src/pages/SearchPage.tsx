@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, MapPin, Trees, Landmark, Phone } from 'lucide-react';
 import { cn } from '../utils/cn';
+import EmptyState from '../components/common/EmptyState';
 
 const SearchPage: React.FC = () => {
   const [query, setQuery] = useState('');
@@ -139,11 +140,12 @@ const SearchPage: React.FC = () => {
       )}
 
       {!loading && query && results.length === 0 && (
-        <div className="text-center py-16 border-2 border-dashed border-[var(--stone)] rounded-2xl">
-          <Search size={48} className="mx-auto text-zinc-300 mb-4" />
-          <p className="text-zinc-500 font-medium">未找到相关结果</p>
-          <p className="text-sm text-zinc-400 mt-1">试试其他关键词</p>
-        </div>
+        <EmptyState
+          icon={Search}
+          title="未找到相关结果"
+          description="试试其他关键词"
+          action={{ label: '清空搜索', onClick: () => { setQuery(''); setResults([]); } }}
+        />
       )}
     </div>
   );
