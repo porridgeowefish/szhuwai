@@ -32,7 +32,6 @@ const App: React.FC = () => {
             <Routes>
               {/* 公开路由 */}
               <Route element={<PublicLayout />}>
-                <Route path="/" element={<HomePage />} />
                 <Route path="/auth/login" element={<LoginPage />} />
                 <Route path="/auth/register" element={<RegisterPage />} />
               </Route>
@@ -45,6 +44,7 @@ const App: React.FC = () => {
                   </ProtectedRoute>
                 }
               >
+                <Route path="/" element={<HomePage />} />
                 <Route path="/reports" element={<ReportListPage />} />
                 <Route path="/reports/:id" element={<ReportDetailPage />} />
                 <Route path="/tools" element={<ToolsPage />} />

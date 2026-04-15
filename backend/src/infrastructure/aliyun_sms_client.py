@@ -5,16 +5,12 @@
 提供阿里云短信发送功能，支持 Mock 模式用于开发测试。
 """
 
-import re
+import json
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from src.api.config import APIConfig
-
-
-# 手机号正则表达式（中国大陆）
-_PHONE_PATTERN = re.compile(r"^1[3-9]\d{9}$")
 
 
 @dataclass
@@ -74,19 +70,6 @@ class AliyunSmsClient:
         """
         return self._mock_mode
 
-    def _validate_phone(self, phone: str) -> bool:
-        """验证手机号格式
-
-        Args:
-            phone: 手机号
-
-        Returns:
-            是否有效
-        """
-        if not phone:
-            return False
-        return bool(_PHONE_PATTERN.match(phone))
-
     def _validate_code(self, code: str) -> bool:
         """验证验证码格式
 
@@ -125,14 +108,6 @@ class AliyunSmsClient:
         Returns:
             发送结果
         """
-        # 验证手机号
-        if not self._validate_phone(phone):
-            return SmsSendResult(
-                success=False,
-                error_code="INVALID_PHONE",
-                error_message="手机号格式错误，请输入11位中国大陆手机号",
-            )
-
         # 验证验证码
         if not self._validate_code(code):
             return SmsSendResult(
@@ -197,7 +172,7 @@ class AliyunSmsClient:
                 phone_numbers=phone,
                 sign_name=self._sign_name,
                 template_code=template_id,
-                template_param=f'{{"code":"{code}"}}',
+                template_param=json.dumps({"code": code}),
             )
 
             # 设置运行时配置（超时等）

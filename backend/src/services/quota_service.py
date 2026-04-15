@@ -147,6 +147,56 @@ class QuotaService:
         self.quota_repo.increment_usage(user_id)
         return True
 
+    def consume_quota_atomic(self, user_id: int) -> QuotaCheckResult:
+        """原子性检查并消耗额度（先扣后用）
+
+        将额度检查和消耗合并为一个原子操作，使用数据库行锁
+        防止并发请求导致的超额问题。
+
+        Args:
+            user_id: 用户 ID
+
+        Returns:
+            QuotaCheckResult: 检查结果，has_quota=False 表示额度不足
+        """
+        # 管理员无限制
+        user = self.user_repo.get_by_id(user_id)
+        if not user:
+            return QuotaCheckResult(
+                has_quota=False,
+                remaining=0,
+                used=0,
+                message="用户不存在",
+            )
+        if user.role == "admin":
+            return QuotaCheckResult(
+                has_quota=True,
+                remaining=-1,
+                used=0,
+            )
+
+        # 原子性检查并递增
+        max_usage = self.DEFAULT_DAILY_QUOTA
+        success, current = self.quota_repo.increment_usage_atomic(user_id, max_usage)
+        used = current
+        remaining = max_usage - used
+
+        return QuotaCheckResult(
+            has_quota=success,
+            remaining=max(0, remaining),
+            used=used,
+        )
+
+    def rollback_quota(self, user_id: int) -> None:
+        """回退额度（规划失败时调用）
+
+        将已消耗的额度回退 1 次。
+
+        Args:
+            user_id: 用户 ID
+        """
+        self.quota_repo.decrement_usage(user_id)
+
     def get_reset_time(self) -> datetime:
         """获取下次重置时间（明天 0 点）
 

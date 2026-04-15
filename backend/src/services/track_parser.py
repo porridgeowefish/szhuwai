@@ -465,7 +465,7 @@ class TrackParser:
                     logger.info(f"[Gradient] Ascent segment interrupted: elev_change={elev_change:.0f}m < {self.MIN_GRADIENT_THRESHOLD_M}m in 1km, current_ascent={total_ascent:.0f}m")
                     if total_ascent >= self.LARGE_ASCENT_THRESHOLD:
                         terrain_changes.append(TerrainChange(
-                            change_type="大爬升",
+                            change_type="large_ascent",
                             start_point=ascent_start,
                             end_point=ascent_peak,
                             elevation_diff=total_ascent,
@@ -768,7 +768,7 @@ class TrackParser:
             cumulative_distances.append(cumulative_distances[-1] + dist)
 
         # 计算抽样间隔
-        sample_interval = total_distance_m / (num_samples - 1) if num_samples > 1 else total_distance_m
+        sample_interval = total_distance_m / max(num_samples - 1, 1) if num_samples > 1 else total_distance_m
 
         # 找出关键点在累计距离中的位置
         max_elev_distance = 0.0

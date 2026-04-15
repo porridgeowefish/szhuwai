@@ -3,10 +3,11 @@
 ===========
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
 from src.api.deps import AdminUser
 from src.infrastructure.mysql_client import get_db
@@ -23,9 +24,10 @@ class UpdateStatusRequest(BaseModel):
 
 
 # ============ 依赖注入 ============
-def get_user_repo() -> UserRepository:
+def get_user_repo(
+    db: Annotated[Session, Depends(get_db)],
+) -> UserRepository:
     """获取用户仓库实例"""
-    db = next(get_db())
     return UserRepository(db)
 
 

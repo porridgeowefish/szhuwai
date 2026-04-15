@@ -211,9 +211,9 @@ class WeatherClient(BaseAPIClient):
         for hour_data in response.get("hourly", []):
             hourly = HourlyWeather(
                 fxTime=hour_data["fxTime"],
-                temp=hour_data["temp"],
-                pop=hour_data.get("pop", "0"),
-                precip=hour_data.get("precip", "0"),
+                temp=int(hour_data["temp"]),
+                pop=int(hour_data.get("pop", 0)),
+                precip=float(hour_data.get("precip", 0)),
                 windScale=hour_data.get("windScale", "0")
             )
             hourly_data.append(hourly)
@@ -252,10 +252,10 @@ class WeatherClient(BaseAPIClient):
         for hour_data in response.get("hourly", []):
             hourly = HourlyWeather(
                 fxTime=hour_data["fxTime"],
-                temp=hour_data["temp"],
-                pop=hour_data["pop"],
-                precip=hour_data["precip"],
-                windScale=hour_data["windScale"]
+                temp=int(hour_data["temp"]),
+                pop=int(hour_data.get("pop", 0)),
+                precip=float(hour_data.get("precip", 0)),
+                windScale=hour_data.get("windScale", "0")
             )
             hourly_data.append(hourly)
 

@@ -65,6 +65,9 @@ class TrackService:
         """
         logger.info("开始坐标纠偏（WGS84 -> GCJ02）")
 
+        # 重置状态，防止多次调用间的数据污染
+        self.key_points = {}
+
         # 处理关键点
         if track_analysis and track_analysis.start_point:
             corrected_lon, corrected_lat = wgs84_to_gcj02(

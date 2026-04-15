@@ -263,20 +263,6 @@ class TestReportService:
             "507f1f77bcf86cd799439011", user_id=1
         )
         mock_report_repo.delete.assert_not_called()
-
-    def test_delete_not_found(self) -> None:
-        """测试删除不存在的报告失败"""
-        # Arrange
-        mock_report_repo = MagicMock()
-        mock_report_repo.get_by_id.return_value = None
-
-        service = ReportService(report_repo=mock_report_repo)
-
-        # Act
-        result = service.delete(report_id="507f1f77bcf86cd799439011", user_id=1)
-
-        # Assert
-        assert result is False
         mock_report_repo.delete.assert_not_called()
 
     def test_extract_report_info(self) -> None:

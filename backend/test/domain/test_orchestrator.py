@@ -27,36 +27,6 @@ class TestOutdoorPlannerRouter:
         assert self.router.search_service is not None
         assert self.router.key_points == {}
 
-    @pytest.mark.skip(reason="需要完整 mock 所有 API 调用，改用集成测试")
-    def test_execute_planning_without_gpx(self):
-        """测试有 GPX 文件的规划（跳过 - 需要网络和 API Key）"""
-        # 此测试需要 mock 所有外部 API 调用，包括：
-        # - 高德地图 API（地理编码、路径规划）
-        # - 天气 API
-        # - 搜索 API
-        # - LLM API
-        # 由于实现复杂度过高，跳过此测试，改为手动测试或集成测试
-        pass
-
-    @pytest.mark.skip(reason="_parse_track method no longer exists")
-    def test_parse_track_none(self):
-        """测试无轨迹文件的情况（应抛出 FileNotFoundError）"""
-        with pytest.raises(FileNotFoundError):
-            self.router._parse_track(None)
-
-    @pytest.mark.skip(reason="_parse_track method no longer exists")
-    def test_parse_track_nonexistent(self):
-        """测试不存在的轨迹文件（应抛出 FileNotFoundError）"""
-        with pytest.raises(FileNotFoundError):
-            self.router._parse_track("nonexistent.gpx")
-
-    @pytest.mark.skip(reason="_coordinate_correction method no longer exists")
-    def test_coordinate_correction_without_track(self):
-        """测试无轨迹数据时的坐标纠偏"""
-        track_analysis = None
-        # 不应该抛出异常
-        self.router._coordinate_correction(track_analysis)
-
     def test_calculate_confidence_score(self):
         """测试可信度评分计算"""
         from src.schemas.base import Point3D

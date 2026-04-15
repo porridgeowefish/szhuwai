@@ -41,6 +41,13 @@ async def analyze_track(
 
     - **file**: GPX/KML 轨迹文件（必填）
     """
+    # 验证文件名
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="文件名不能为空"
+        )
+
     # 验证文件后缀
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:

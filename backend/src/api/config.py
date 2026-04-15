@@ -149,6 +149,28 @@ class APIConfig(BaseModel):
         description="数据库名"
     )
 
+    # Redis 配置
+    REDIS_HOST: str = Field(
+        default="localhost",
+        description="Redis 主机"
+    )
+    REDIS_PORT: int = Field(
+        default=6379,
+        ge=1,
+        le=65535,
+        description="Redis 端口"
+    )
+    REDIS_PASSWORD: str = Field(
+        default="",
+        description="Redis 密码"
+    )
+    REDIS_DB: int = Field(
+        default=0,
+        ge=0,
+        le=15,
+        description="Redis 数据库编号"
+    )
+
     # JWT 配置
     JWT_SECRET_KEY: str = Field(
         default="change-me-in-production",
@@ -286,6 +308,11 @@ class APIConfig(BaseModel):
             "MONGO_USER": "MONGO_USER",
             "MONGO_PASSWORD": "MONGO_PASSWORD",
             "MONGO_DATABASE": "MONGO_DATABASE",
+            # Redis 环境变量
+            "REDIS_HOST": "REDIS_HOST",
+            "REDIS_PORT": "REDIS_PORT",
+            "REDIS_PASSWORD": "REDIS_PASSWORD",
+            "REDIS_DB": "REDIS_DB",
             # 阿里云短信环境变量
             "ALIYUN_ACCESS_KEY_ID": "ALIYUN_ACCESS_KEY_ID",
             "ALIYUN_ACCESS_KEY_SECRET": "ALIYUN_ACCESS_KEY_SECRET",

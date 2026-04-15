@@ -6,17 +6,16 @@ POST /auth/sms/send - 发送短信验证码
 """
 
 
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
 from src.api.config import api_config
 from src.api.routes.common import ApiResponse, ErrorCodes
-from src.infrastructure.mysql_client import get_db
 from src.infrastructure.aliyun_sms_client import get_aliyun_sms_client
-from src.repositories.sms_code_repo import SmsCodeRepository
-from src.repositories.sms_log_repo import SmsLogRepository
 from src.schemas.sms import SmsSendRequest
-from src.services.sms_service import SmsService
+from src.services.redis_sms_service import RedisSmsCodeService
 
 router = APIRouter(prefix="/auth/sms", tags=["短信"])
 
@@ -30,13 +29,10 @@ class SendCodeData(BaseModel):
 
 
 # ============ 依赖注入 ============
-def get_sms_service() -> SmsService:
-    """获取短信服务实例"""
-    db = next(get_db())
-    sms_code_repo = SmsCodeRepository(db)
-    sms_log_repo = SmsLogRepository(db)
+def get_sms_service() -> RedisSmsCodeService:
+    """获取短信验证码服务实例"""
     sms_client = get_aliyun_sms_client()
-    return SmsService(sms_code_repo, sms_log_repo, sms_client, api_config)
+    return RedisSmsCodeService(sms_client, api_config)
 
 
 # ============ 路由定义 ============
@@ -44,7 +40,7 @@ def get_sms_service() -> SmsService:
 async def send_sms_code(
     request: SmsSendRequest,
     http_request: Request,
-    sms_service: SmsService = Depends(get_sms_service),
+    sms_service: RedisSmsCodeService = Depends(get_sms_service),
 ) -> ApiResponse[SendCodeData]:
     """
     发送短信验证码

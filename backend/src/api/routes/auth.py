@@ -17,8 +17,6 @@ from src.infrastructure.aliyun_sms_client import get_aliyun_sms_client
 from src.infrastructure.jwt_handler import get_jwt_handler
 from src.infrastructure.mysql_client import get_db
 from src.infrastructure.password_hasher import get_password_hasher
-from src.repositories.sms_code_repo import SmsCodeRepository
-from src.repositories.sms_log_repo import SmsLogRepository
 from src.repositories.user_repo import UserRepository
 from src.schemas.auth import (
     BindPhoneRequest,
@@ -31,7 +29,7 @@ from src.schemas.auth import (
 )
 from src.schemas.user import UserResponse
 from src.services.auth_service import AuthService
-from src.services.sms_service import SmsService
+from src.services.redis_sms_service import RedisSmsCodeService
 
 router = APIRouter(prefix="/auth", tags=["认证"])
 
@@ -48,10 +46,8 @@ def get_auth_service(db: Session = Depends(get_db)) -> AuthService:
     """获取认证服务实例"""
     user_repo = UserRepository(db)
 
-    sms_code_repo = SmsCodeRepository(db)
-    sms_log_repo = SmsLogRepository(db)
     sms_client = get_aliyun_sms_client()
-    sms_service = SmsService(sms_code_repo, sms_log_repo, sms_client, api_config)
+    sms_service = RedisSmsCodeService(sms_client, api_config)
 
     jwt_handler = get_jwt_handler()
     password_hasher = get_password_hasher()

@@ -168,10 +168,14 @@ class WeatherAnalyzer:
 
     def _parse_wind_scale(self, wind_scale_str: str) -> int:
         """解析风力等级字符串"""
+        if not wind_scale_str:
+            return 0
         if wind_scale_str.isdigit():
-            return int(wind_scale_str[0])
-        elif wind_scale_str and wind_scale_str[0].isdigit():
-            return int(wind_scale_str[0])
+            return int(wind_scale_str)
+        # 处理 "10-11" 等范围格式：取破折号前的部分
+        first_part = wind_scale_str.split("-")[0]
+        if first_part.isdigit():
+            return int(first_part)
         return 0
 
     def get_comprehensive_analysis(

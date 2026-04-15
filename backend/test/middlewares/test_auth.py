@@ -25,16 +25,13 @@ from src.schemas.user import UserResponse
 class TestGetUserRepo:
     """get_user_repo 依赖测试"""
 
-    @patch("src.api.deps.get_db")
-    def test_get_user_repo(self, mock_get_db: MagicMock) -> None:
+    def test_get_user_repo(self) -> None:
         """测试获取用户仓库"""
         mock_db = MagicMock()
-        mock_get_db.return_value = iter([mock_db])
 
-        result = get_user_repo()
+        result = get_user_repo(db=mock_db)
 
         assert result is not None
-        mock_get_db.assert_called_once()
 
 
 class TestGetCurrentUser:

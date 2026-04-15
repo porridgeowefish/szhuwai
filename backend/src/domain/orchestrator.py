@@ -178,10 +178,10 @@ class OutdoorPlannerRouter:
                         "终点"
                     ))
                 # 中点
-                if hasattr(track_analysis, 'track_points') and track_analysis.track_points and len(track_analysis.track_points) > 10:
-                    mid_idx = len(track_analysis.track_points) // 2
-                    mid_point = track_analysis.track_points[mid_idx]
-                    additional_points.append((mid_point.lon, mid_point.lat, "中点"))
+                if hasattr(track_analysis, 'track_points_gcj02') and track_analysis.track_points_gcj02 and len(track_analysis.track_points_gcj02) > 10:
+                    mid_idx = len(track_analysis.track_points_gcj02) // 2
+                    mid_point = track_analysis.track_points_gcj02[mid_idx]
+                    additional_points.append((mid_point.lng, mid_point.lat, "中点"))
 
                 return self.weather_service.get_summary(
                     lon=start.lon,
@@ -331,7 +331,7 @@ class OutdoorPlannerRouter:
                         for pt in context.weather_raw.grid_points:
                             if pt.get("point_type") == "最高点":
                                 summit_weather = type('SummitWeather', (), {
-                                    'tempMin': pt.get("temp", 20),
+                                    'tempMin': pt.get("tempMin", pt.get("temp", 20)),
                                     'humidity': pt.get("humidity", 50),
                                     'windSpeedDay': 0
                                 })()

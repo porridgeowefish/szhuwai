@@ -222,8 +222,15 @@ def client(mocker) -> TestClient:
     mock_sms_client = mocker.MagicMock()
     mock_sms_client.send_verification_code = mock_send_verification_code
     mock_sms_client.get_template_id = mock_get_template_id
+    mock_sms_client._is_mock_mode.return_value = True
     mocker.patch("src.infrastructure.aliyun_sms_client.aliyun_sms_client", mock_sms_client)
     mocker.patch("src.infrastructure.aliyun_sms_client.get_aliyun_sms_client", return_value=mock_sms_client)
+
+    # Mock Redis 客户端 - 使用内存后端
+    from src.infrastructure.redis_client import InMemoryBackend
+    mock_redis = InMemoryBackend()
+    mocker.patch("src.infrastructure.redis_client._redis_client", mock_redis)
+    mocker.patch("src.infrastructure.redis_client.get_redis", return_value=mock_redis)
 
     # Mock MongoDB 客户端 - 配置报告存储
     mock_mongo_client = mocker.MagicMock()

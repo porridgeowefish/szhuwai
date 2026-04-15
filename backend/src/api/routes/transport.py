@@ -5,13 +5,17 @@
 POST /api/v1/transport/plan - 交通规划
 """
 
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
 from pydantic import BaseModel, Field
 
 from src.schemas.transport import TransportRoutes
 from src.api.map_client import MapClient
+from src.api.deps import OptionalUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/transport", tags=["交通规划"])
 
@@ -25,6 +29,7 @@ class TransportPlanResponse(BaseModel):
 
 @router.post("/plan", response_model=TransportPlanResponse)
 async def plan_transport(
+    current_user: OptionalUser = None,
     departure_point: str = Form(..., description="出发地点"),
     destination_lon: float = Form(..., description="目的地经度"),
     destination_lat: float = Form(..., description="目的地纬度")
@@ -37,6 +42,9 @@ async def plan_transport(
     - **destination_lat**: 目的地纬度
     """
     try:
+        if current_user is None:
+            logger.warning("交通规划接口未认证访问，建议登录后使用")
+
         client = MapClient()
 
         # 出发地地理编码
@@ -117,7 +125,7 @@ async def plan_transport(
             recommended_mode=recommended_mode,
             fastest_mode=fastest_mode,
             cheapest_mode=cheapest_mode,
-            taxi_cost_yuan=driving_route.tolls_yuan,
+            taxi_cost_yuan=driving_route.taxi_cost_yuan,
             transit_routes=transit_routes if transit_routes else None
         )
 

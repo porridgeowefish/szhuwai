@@ -5,13 +5,17 @@
 POST /api/v1/search/query - 搜索查询
 """
 
+import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
 from pydantic import BaseModel, Field
 
 from src.schemas.search import WebSearchResponse
 from src.api.search_client import SearchClient
+from src.api.deps import OptionalUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/search", tags=["搜索查询"])
 
@@ -25,6 +29,7 @@ class SearchQueryResponse(BaseModel):
 
 @router.post("/query", response_model=SearchQueryResponse)
 async def query_search(
+    current_user: OptionalUser = None,
     keywords: str = Form(..., description="搜索关键词"),
     max_results: int = Form(5, description="每组搜索的最大结果数")
 ) -> SearchQueryResponse:
@@ -35,6 +40,9 @@ async def query_search(
     - **max_results**: 每组搜索的最大结果数
     """
     try:
+        if current_user is None:
+            logger.warning("搜索接口未认证访问，建议登录后使用")
+
         client = SearchClient()
 
         # 构建搜索查询
@@ -51,7 +59,8 @@ async def query_search(
                 result = client.search(query, max_results=max_results)
                 if result and isinstance(result, WebSearchResponse):
                     all_results.append(result)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"搜索查询失败: {e}")
                 continue
 
         return SearchQueryResponse(

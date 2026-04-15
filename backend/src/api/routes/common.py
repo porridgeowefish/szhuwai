@@ -5,12 +5,16 @@
 提供统一的 API 响应模型、错误码定义和认证依赖。
 """
 
-from typing import Any, Generic, TypeVar
+from typing import Annotated, Any, Generic, TypeVar
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
+from sqlalchemy.orm import Session
 
+from src.infrastructure.mysql_client import get_db
+from src.infrastructure.jwt_handler import get_jwt_handler
+from src.repositories.user_repo import UserRepository
 from src.schemas.user import UserResponse
 
 # ============ 错误码定义 ============
@@ -88,6 +92,7 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_optional_auth(
+    db: Annotated[Session, Depends(get_db)],
     credentials: HTTPAuthorizationCredentials | None = Depends(security),
 ) -> dict[str, Any] | None:
     """可选认证依赖
@@ -97,17 +102,10 @@ async def get_optional_auth(
     Returns:
         Token 载荷字典，未提供或无效时返回 None
     """
-    from src.infrastructure.mysql_client import get_db
-
-    # 获取依赖
-    from src.repositories.user_repo import UserRepository
-    from src.infrastructure.jwt_handler import get_jwt_handler
-
     if credentials is None:
         return None
 
     try:
-        db = next(get_db())
         jwt_handler = get_jwt_handler()
 
         # 验证 Token
@@ -130,6 +128,7 @@ async def get_optional_auth(
 
 
 async def get_current_user(
+    db: Annotated[Session, Depends(get_db)],
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ) -> dict[str, Any]:
     """获取当前认证用户
@@ -142,12 +141,6 @@ async def get_current_user(
     Raises:
         HTTPException: 未认证或 Token 无效时
     """
-    from src.infrastructure.mysql_client import get_db
-
-    # 获取依赖
-    from src.repositories.user_repo import UserRepository
-    from src.infrastructure.jwt_handler import get_jwt_handler
-
     if credentials is None:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -155,7 +148,6 @@ async def get_current_user(
         )
 
     try:
-        db = next(get_db())
         jwt_handler = get_jwt_handler()
 
         # 验证 Token
@@ -182,7 +174,6 @@ async def get_current_user(
             "username": payload.username,
             "role": payload.role,
             "user": user,
-            "db": db,
         }
 
     except HTTPException:

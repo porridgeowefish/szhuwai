@@ -617,10 +617,6 @@ class TestPasswordResetFlow:
         })
         assert old_login.status_code == 200
         assert old_login.json()["code"] == 100005  # INVALID_PASSWORD
-
-
-@pytest.mark.auth
-class TestErrorScenarios:
     """错误场景测试"""
 
     def test_invalid_token(self, client: TestClient):

@@ -68,8 +68,13 @@ deploy.sh
 # Node.js / Frontend
 node_modules/
 dist/
+frontend/dist/
+frontend/metadata.json
 .npm
 *.tsbuildinfo
+
+# Pip artifacts
+backend/=*
 
 # Logs
 npm-debug.log*

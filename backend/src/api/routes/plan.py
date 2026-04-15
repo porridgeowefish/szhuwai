@@ -33,7 +33,11 @@ router = APIRouter(prefix="/plan", tags=["计划生成"])
 # 常量配置
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 TEMP_TRACKS_DIR = Path("temp_tracks")
-TEMP_TRACKS_DIR.mkdir(exist_ok=True)
+
+
+def _ensure_temp_dir() -> None:
+    """确保临时轨迹目录存在"""
+    TEMP_TRACKS_DIR.mkdir(exist_ok=True)
 
 
 class PlanGenerateResponse(BaseModel):
@@ -89,6 +93,7 @@ async def generate_plan(
     - **plan_title**: 线路名称/计划书标题（必填）
     - **key_destinations**: 核心目的地，逗号分隔（必填）
     """
+    _ensure_temp_dir()
     temp_file_path = None
 
     # 验证必填字段
@@ -113,8 +118,8 @@ async def generate_plan(
         )
 
     try:
-        # 1. 检查额度
-        quota_check = quota_service.check_quota(user.id)
+        # 1. 原子性消耗额度（先扣后用）
+        quota_check = quota_service.consume_quota_atomic(user.id)
         if not quota_check.has_quota:
             raise HTTPException(
                 status_code=403,
@@ -158,10 +163,7 @@ async def generate_plan(
             key_destinations=destinations_list
         )
 
-        # 4. 消耗额度
-        quota_service.consume_quota(user.id)
-
-        # 5. 保存报告
+        # 4. 保存报告（额度已在步骤 1 原子性消耗）
         plan_dict = plan.model_dump()
         report_id = report_service.create(user.id, plan_dict)
 
@@ -175,15 +177,35 @@ async def generate_plan(
         )
 
     except HTTPException:
+        # 文件格式/大小验证失败时，回退已消耗的额度
+        try:
+            quota_service.rollback_quota(user.id)
+        except Exception:
+            logger.warning(f"回退额度失败: user_id={user.id}")
         raise
     except FileNotFoundError as e:
         logger.error(f"文件未找到: {e}")
+        # 规划过程异常，回退额度
+        try:
+            quota_service.rollback_quota(user.id)
+        except Exception:
+            logger.warning(f"回退额度失败: user_id={user.id}")
         raise HTTPException(status_code=404, detail=str(e))
     except ValueError as e:
         logger.error(f"参数错误: {e}")
+        # 规划过程异常，回退额度
+        try:
+            quota_service.rollback_quota(user.id)
+        except Exception:
+            logger.warning(f"回退额度失败: user_id={user.id}")
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"生成计划时发生错误: {e}")
+        # 规划过程异常，回退额度
+        try:
+            quota_service.rollback_quota(user.id)
+        except Exception:
+            logger.warning(f"回退额度失败: user_id={user.id}")
         raise HTTPException(status_code=500, detail=f"生成计划时发生错误: {str(e)}")
     finally:
         # 清理临时文件

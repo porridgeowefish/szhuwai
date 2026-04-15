@@ -172,7 +172,7 @@ class TrackAnalysisResult(BaseModel):
         """获取路段警告信息"""
         warnings = []
         for i, segment in enumerate(self.terrain_analysis):
-            if segment.change_type == "大爬升":
+            if segment.change_type == "large_ascent":
                 warnings.append(f"第{i+1}段：大爬升{segment.elevation_diff:.0f}米，坡度{segment.gradient_percent:.1f}%")
             else:
                 warnings.append(f"第{i+1}段：大下降{segment.elevation_diff:.0f}米，坡度{segment.gradient_percent:.1f}%")

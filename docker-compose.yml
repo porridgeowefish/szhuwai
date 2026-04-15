@@ -54,6 +54,26 @@ services:
       retries: 10
 
   # ====================================
+  # Redis 缓存服务
+  # ====================================
+  redis:
+    image: redis:7-alpine
+    container_name: outdoor-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - outdoor-network
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ====================================
   # 后端服务
   # ====================================
   backend:
@@ -65,7 +85,7 @@ services:
     ports:
       - "8000:8000"
     env_file:
-      - .env
+      - backend/.env
     environment:
       # Docker 服务名作为数据库主机
       MYSQL_HOST: mysql
@@ -87,6 +107,8 @@ services:
       mysql:
         condition: service_healthy
       mongodb:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   # ====================================
@@ -129,3 +151,5 @@ volumes:
     name: outdoor_mongodb_config
   mysql_data:
     name: outdoor_mysql_data
+  redis_data:
+    name: outdoor_redis_data

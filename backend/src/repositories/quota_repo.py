@@ -125,6 +125,59 @@ class QuotaRepository:
         )
         return quota.usage_count
 
+    def increment_usage_atomic(self, user_id: int, max_usage: int) -> tuple[bool, int]:
+        """原子性递增使用次数（带行锁）
+
+        使用 SELECT ... FOR UPDATE 行锁确保并发安全，
+        将检查和递增合并为同一事务内的原子操作。
+
+        Args:
+            user_id: 用户 ID
+            max_usage: 最大允许使用次数
+
+        Returns:
+            (success, current_count) - success=False 表示已超额
+        """
+        quota = (
+            self.session.query(QuotaUsage)
+            .filter_by(user_id=user_id, usage_date=date.today())
+            .with_for_update()
+            .first()
+        )
+        if quota is None:
+            quota = QuotaUsage(
+                user_id=user_id,
+                usage_date=date.today(),
+                usage_count=1,
+            )
+            self.session.add(quota)
+            self.session.flush()
+            return (True, 1)
+
+        if quota.usage_count >= max_usage:
+            return (False, quota.usage_count)
+
+        quota.usage_count += 1
+        self.session.flush()
+        return (True, quota.usage_count)
+
+    def decrement_usage(self, user_id: int) -> None:
+        """回退使用次数（规划失败时调用）
+
+        将已消耗的额度减 1，用于规划过程中的异常回滚。
+
+        Args:
+            user_id: 用户 ID
+        """
+        quota = (
+            self.session.query(QuotaUsage)
+            .filter_by(user_id=user_id, usage_date=date.today())
+            .first()
+        )
+        if quota and quota.usage_count > 0:
+            quota.usage_count -= 1
+            self.session.flush()
+
     def check_quota(
         self, user_id: int, max_count: int = DEFAULT_DAILY_QUOTA
     ) -> tuple[bool, int]:

@@ -3,9 +3,10 @@
 ========
 """
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
 
 from src.api.deps import CurrentUser
 from src.infrastructure.mysql_client import get_db
@@ -17,9 +18,10 @@ router = APIRouter(prefix="/quota", tags=["额度"])
 
 
 # ============ 依赖注入 ============
-def get_quota_service() -> QuotaService:
+def get_quota_service(
+    db: Annotated[Session, Depends(get_db)],
+) -> QuotaService:
     """获取额度服务实例"""
-    db = next(get_db())
     quota_repo = QuotaRepository(db)
     user_repo = UserRepository(db)
     return QuotaService(quota_repo=quota_repo, user_repo=user_repo)

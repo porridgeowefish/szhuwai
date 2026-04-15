@@ -129,10 +129,10 @@ class JWTHandler:
             JWTError: 当 Token 格式错误时
         """
         try:
-            # 不验证签名时仍需提供 key，使用空字符串
+            # 不验证签名时仍需提供 key，保持代码一致性
             return jwt.decode(
                 token,
-                "",
+                self._secret_key,
                 options={"verify_signature": False},
             )
         except JWTError as e:

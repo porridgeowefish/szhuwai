@@ -5,15 +5,27 @@
 POST /api/v1/weather/query - 天气查询
 """
 
+import logging
 from typing import Optional
 
-from fastapi import APIRouter, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException
 from pydantic import BaseModel, Field
 
 from src.schemas.weather import WeatherSummary
 from src.api.weather_client import WeatherClient
+from src.api.deps import OptionalUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/weather", tags=["天气查询"])
+
+
+def _safe_int(val, default: int = 0) -> int:
+    """安全地将值转换为整数，处理 NaN、空字符串等异常情况"""
+    try:
+        return int(float(val))
+    except (ValueError, TypeError):
+        return default
 
 
 class WeatherQueryRequest(BaseModel):
@@ -32,6 +44,7 @@ class WeatherQueryResponse(BaseModel):
 
 @router.post("/query", response_model=WeatherQueryResponse)
 async def query_weather(
+    current_user: OptionalUser = None,
     lon: float = Form(..., description="经度"),
     lat: float = Form(..., description="纬度"),
     trip_date: str = Form(..., description="出行日期 (YYYY-MM-DD)")
@@ -44,6 +57,9 @@ async def query_weather(
     - **trip_date**: 出行日期 (YYYY-MM-DD)
     """
     try:
+        if current_user is None:
+            logger.warning("天气接口未认证访问，建议登录后使用")
+
         client = WeatherClient()
 
         # 获取3天格点天气预报
@@ -53,8 +69,8 @@ async def query_weather(
         hourly_weather = None
         try:
             hourly_weather = client.get_grid_weather_24h(lon, lat)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"获取逐小时天气失败: {e}")
 
         # 获取多抽样点天气（起点实时天气）
         grid_points = []
@@ -64,12 +80,12 @@ async def query_weather(
                 now = now_weather["now"]
                 grid_points.append({
                     "point_type": "查询点",
-                    "temp": int(float(now.get("temp", 0))),
+                    "temp": _safe_int(now.get("temp", 0)),
                     "wind_scale": now.get("windScale", "0"),
-                    "humidity": int(float(now.get("humidity", 0)))
+                    "humidity": _safe_int(now.get("humidity", 0))
                 })
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"获取实时天气失败: {e}")
 
         # 转换为 WeatherSummary
         from src.schemas.weather import WeatherSummary, CityWeatherResponse, CityWeatherDaily

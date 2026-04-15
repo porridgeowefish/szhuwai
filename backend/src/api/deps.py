@@ -21,15 +21,20 @@ security = HTTPBearer(auto_error=False)
 
 
 # ============ 获取数据库会话 ============
-def get_user_repo() -> UserRepository:
+def get_user_repo(
+    db: Annotated[Session, Depends(get_db)],
+) -> UserRepository:
     """获取用户仓库实例
 
     这是一个工厂函数，用于 FastAPI 依赖注入。
+    通过 Depends(get_db) 注入数据库会话，确保会话生命周期由 FastAPI 管理。
+
+    Args:
+        db: 数据库会话（通过依赖注入自动提供）
 
     Returns:
         UserRepository: 用户仓库实例
     """
-    db: Session = next(get_db())
     return UserRepository(db)
 
 

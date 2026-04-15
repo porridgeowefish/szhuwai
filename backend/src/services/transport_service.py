@@ -138,7 +138,7 @@ class TransportService:
             recommended_mode=recommended_mode,
             fastest_mode=fastest_mode,
             cheapest_mode=cheapest_mode,
-            taxi_cost_yuan=driving_route.tolls_yuan,
+            taxi_cost_yuan=driving_route.taxi_cost_yuan,
             transit_routes=transit_routes if transit_routes else None
         )
 

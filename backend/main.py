@@ -33,6 +33,7 @@ from src.infrastructure.mysql_client import init_mysql_client
 from src.infrastructure.jwt_handler import init_jwt_handler
 from src.infrastructure.aliyun_sms_client import init_aliyun_sms_client
 from src.infrastructure.mongo_client import init_mongo_client
+from src.infrastructure.redis_client import init_redis
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -83,6 +84,13 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"JWT 处理器初始化失败: {e}")
 
+    # 安全警告：检测默认 JWT 密钥
+    if api_config.JWT_SECRET_KEY == "change-me-in-production":
+        logger.warning(
+            "安全警告: JWT_SECRET_KEY 使用默认值 'change-me-in-production'，"
+            "请在生产环境中通过环境变量设置强密钥！"
+        )
+
     # 初始化短信客户端
     try:
         init_aliyun_sms_client(api_config)
@@ -96,6 +104,13 @@ async def startup_event():
         logger.info("MongoDB 客户端初始化成功")
     except Exception as e:
         logger.warning(f"MongoDB 客户端初始化失败: {e}")
+
+    # 初始化 Redis 客户端
+    try:
+        init_redis(api_config)
+        logger.info("Redis 客户端初始化成功")
+    except Exception as e:
+        logger.warning(f"Redis 客户端初始化失败: {e}")
 
 # ============ 注册模块化路由 ============
 app.include_router(track_router, prefix=f"/api/{API_VERSION}")

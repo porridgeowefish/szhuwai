@@ -1,6 +1,6 @@
 # 部署指南
 
-## 📋 目录
+## 目录
 
 1. [快速开始](#快速开始)
 2. [本地开发部署](#本地开发部署)
@@ -10,7 +10,7 @@
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ### 前置要求
 
@@ -67,7 +67,7 @@ python main.py
 
 ---
 
-## 💻 本地开发部署
+## 本地开发部署
 
 ### 方案一：使用本地 MySQL + Docker MongoDB
 
@@ -119,7 +119,27 @@ python main.py
 
 ---
 
-## 🐳 Docker 完整部署
+## Docker 完整部署
+
+### 项目结构
+
+```
+03_Code/
+├── docker-compose.yml         # Docker 编排配置
+├── .env.example               # 环境变量模板
+│
+├── backend/
+│   ├── Dockerfile             # 后端镜像构建（Python 3.11）
+│   ├── main.py                # FastAPI 应用入口
+│   ├── requirements.txt       # Python 依赖
+│   └── src/                   # 源代码
+│
+└── frontend/
+    ├── Dockerfile             # 前端镜像构建
+    ├── nginx.conf             # Nginx 配置（API 代理）
+    ├── vite.config.ts         # Vite 配置（开发代理）
+    └── src/                   # React 源代码
+```
 
 ### 架构图
 
@@ -138,6 +158,32 @@ python main.py
 │                    └─────────────┘                     │
 └─────────────────────────────────────────────────────────┘
 ```
+
+### 关键配置文件
+
+#### 1. docker-compose.yml
+- **MySQL**: 端口 3306（容器）/ 3307（主机）
+- **MongoDB**: 端口 27017
+- **Backend**: 端口 8000，健康检查 `/health`
+- **Frontend**: 端口 80，反向代理 `/api/*` 到后端
+
+#### 2. .env.example
+包含所有必需的环境变量：
+- API 密钥（天气、地图、LLM、搜索）
+- 数据库连接
+- JWT 配置
+- 短信配置
+
+#### 3. backend/Dockerfile
+- 基于 Python 3.11
+- 时区设置: Asia/Shanghai
+- 健康检查: `/health`
+- 启动命令: `uvicorn main:app --host 0.0.0.0 --port 8000 --workers 4`
+
+#### 4. frontend/nginx.conf
+- 静态文件服务: `/`
+- API 反向代理: `/api/*` -> `http://backend:8000/api/*`
+- 超时设置: 600秒（LLM 生成）
 
 ### 完整部署命令
 
@@ -160,16 +206,32 @@ docker-compose down -v
 
 ### 服务端口映射
 
-| 服务 | 容器端口 | 主机端口 | 说明 |
-|------|---------|---------|------|
-| Frontend | 80 | 80 | Web 界面 |
-| Backend | 8000 | 8000 | API 服务 |
-| MongoDB | 27017 | 27017 | 报告存储 |
-| MySQL | 3306 | 3307 | 用户数据 |
+| 服务 | 容器端口 | 主机端口 | 访问地址 | 说明 |
+|------|---------|---------|---------|------|
+| Frontend | 80 | 80 | http://localhost | Web 界面 |
+| Backend | 8000 | 8000 | http://localhost:8000 | API 服务 |
+| MySQL | 3306 | 3307 | localhost:3307 | 用户数据 |
+| MongoDB | 27017 | 27017 | localhost:27017 | 报告存储 |
+
+### 验证部署
+
+```bash
+# 1. 检查容器状态
+docker-compose ps
+
+# 2. 检查健康状态
+curl http://localhost:8000/health
+
+# 3. 查看 API 文档
+# 浏览器访问 http://localhost:8000/docs
+
+# 4. 访问前端
+# 浏览器访问 http://localhost
+```
 
 ---
 
-## ☁️ 云端部署
+## 云端部署
 
 ### MongoDB Atlas (推荐)
 
@@ -204,6 +266,32 @@ docker-compose --profile production up -d
 2. **云数据库 MongoDB**: 使用云厂商提供的 MongoDB 实例
 3. **应用部署**: 使用 Docker Compose 或 Kubernetes
 
+#### 服务器准备
+
+```bash
+# 安装 Docker
+curl -fsSL https://get.docker.com | bash -s docker --mirror Aliyun
+
+# 安装 Docker Compose
+curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+```
+
+#### 部署应用
+
+```bash
+# 克隆代码
+git clone <repo> /opt/outdoor-planner
+cd /opt/outdoor-planner/03_Code
+
+# 配置环境
+cp .env.example .env
+vi .env  # 填写 API 密钥
+
+# 启动服务
+docker-compose --profile with-frontend up -d
+```
+
 #### 环境变量配置
 
 ```env
@@ -219,9 +307,41 @@ MONGO_USER=outdoor_user
 MONGO_PASSWORD=strong_password_here
 ```
 
+#### 配置域名 + HTTPS（可选）
+
+```bash
+# 安装 Nginx + Certbot
+apt-get install -y nginx certbot python3-certbot-nginx
+
+# 配置站点
+vi /etc/nginx/sites-available/outdoor-planner
+```
+
+```nginx
+server {
+    listen 80;
+    server_name your-domain.com;
+
+    location / {
+        proxy_pass http://localhost:80;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+    }
+}
+```
+
+```bash
+# 启用站点
+ln -s /etc/nginx/sites-available/outdoor-planner /etc/nginx/sites-enabled/
+nginx -t && systemctl reload nginx
+
+# 申请 SSL 证书
+certbot --nginx -d your-domain.com
+```
+
 ---
 
-## 🔧 常见问题
+## 常见问题
 
 ### Q1: MySQL 连接失败
 
@@ -277,9 +397,17 @@ mongodump --uri="mongodb://localhost:27017/outdoor_planner" --out=./backup
 mongorestore --uri="mongodb+srv://cloud-host/outdoor_planner" ./backup
 ```
 
+### Q6: Docker 镜像构建失败
+
+**解决方案**: 清理 Docker 缓存：`docker system prune -a`
+
+### Q7: API 404
+
+**解决方案**: 检查 nginx.conf 中的代理配置
+
 ---
 
-## 📚 API 端点
+## API 端点
 
 ### 认证
 - `POST /api/v1/auth/register` - 用户注册
@@ -305,20 +433,46 @@ mongorestore --uri="mongodb+srv://cloud-host/outdoor_planner" ./backup
 
 ---
 
-## 🔐 生产环境检查清单
+## 生产环境检查清单
 
 - [ ] 修改 `JWT_SECRET_KEY` 为随机密钥
 - [ ] 设置强密码的数据库用户
 - [ ] 配置 HTTPS/SSL 证书
 - [ ] 启用防火墙规则
-- [ ] 配置日志监控
+- [ ] 限制入站端口（仅 80、443、22）
+- [ ] 配置日志监控和日志轮转
 - [ ] 设置数据库备份
 - [ ] 配置 CDN（静态资源）
 - [ ] 启用速率限制
 - [ ] 配置告警通知
+- [ ] 定期更新 Docker 镜像
 
 ---
 
-## 📞 支持
+## 运维命令
+
+```bash
+# 查看日志
+docker-compose logs -f backend
+docker-compose logs -f frontend
+
+# 重启服务
+docker-compose restart backend
+
+# 进入容器
+docker exec -it outdoor-backend bash
+docker exec -it outdoor-mysql bash
+
+# 更新代码
+git pull
+docker-compose up -d --build
+
+# 备份数据
+docker exec outdoor-mysql mysqldump -u root -p"password" outdoor_planner > backup.sql
+```
+
+---
+
+## 支持
 
 如有问题，请提交 Issue 或查看项目文档。

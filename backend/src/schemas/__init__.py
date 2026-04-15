@@ -58,7 +58,7 @@ from .sms import (
     SmsScene,
     SmsSendRequest,
     SmsSendResponse,
-    SmsVerifyRequest
+    validate_phone,
 )
 from .auth import (
     UsernameRegisterRequest,
@@ -133,7 +133,7 @@ __all__ = [
     "SmsScene",
     "SmsSendRequest",
     "SmsSendResponse",
-    "SmsVerifyRequest",
+    "validate_phone",
 
     # Auth models
     "UsernameRegisterRequest",
