@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { FileText, Trash2, Calendar, Search, Filter } from 'lucide-react';
+import { FileText, Trash2, Calendar, Search, AlertTriangle, Loader2 } from 'lucide-react';
 import { reportsAPI } from '../lib/api/reports';
-import { ReportDocument } from '../lib/api/types';
+import { ReportDocument, PaginatedResponse } from '../lib/api/types';
 import { cn } from '../utils/cn';
 
 const ReportListPage: React.FC = () => {
@@ -11,6 +11,8 @@ const ReportListPage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [searchQuery, setSearchQuery] = useState('');
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchReports();
@@ -19,7 +21,7 @@ const ReportListPage: React.FC = () => {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const response = await reportsAPI.list({ page, page_size: 20 }) as any;
+      const response = await reportsAPI.list({ page, page_size: 20 }) as unknown as PaginatedResponse<ReportDocument>;
       setReports(response.items);
       setTotal(response.total);
     } catch (err) {
@@ -30,14 +32,26 @@ const ReportListPage: React.FC = () => {
   };
 
   const handleDelete = async (reportId: string) => {
-    if (!confirm('确定要删除这份报告吗？')) return;
+    setDeleteTarget(reportId);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeletingId(deleteTarget);
     try {
-      await reportsAPI.delete(reportId);
-      setReports(reports.filter(r => r.id !== reportId));
+      await reportsAPI.delete(deleteTarget);
+      setReports(reports.filter(r => r.id !== deleteTarget));
       setTotal(total - 1);
     } catch (err) {
       console.error('删除报告失败:', err);
+    } finally {
+      setDeletingId(null);
+      setDeleteTarget(null);
     }
+  };
+
+  const cancelDelete = () => {
+    setDeleteTarget(null);
   };
 
   const filteredReports = reports.filter(r =>
@@ -52,7 +66,9 @@ const ReportListPage: React.FC = () => {
           <h1 className="text-3xl font-bold text-zinc-900" style={{ fontFamily: 'Playfair Display, serif' }}>
             我的报告
           </h1>
-          <p className="text-sm text-zinc-500 mt-1">共 {total} 份报告</p>
+          <p className="text-sm text-zinc-500 mt-1">
+            {searchQuery ? `找到 ${filteredReports.length} 份报告（共 ${total} 份）` : `共 ${total} 份报告`}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <div className="relative">
@@ -111,24 +127,52 @@ const ReportListPage: React.FC = () => {
                   {report.overallRating}
                 </span>
               </div>
-              <div className="flex items-center justify-between pt-4 border-t border-[var(--stone)]">
-                <span className="text-xs text-zinc-400">
-                  {new Date(report.createdAt).toLocaleString('zh-CN')}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Link
-                    to={`/reports/${report.id}`}
-                    className="text-xs font-medium text-[var(--forest)] hover:underline"
-                  >
-                    查看详情
-                  </Link>
-                  <button
-                    onClick={() => handleDelete(report.id)}
-                    className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
+              <div className="flex items-center justify-between pt-4 border-t border-[var(--stone)] min-h-[40px]">
+                {deleteTarget === report.id ? (
+                  <div className="w-full flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 text-xs text-red-600">
+                      <AlertTriangle size={14} />
+                      <span className="font-medium">确定删除？</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={cancelDelete}
+                        disabled={deletingId === report.id}
+                        className="px-3 py-1 text-xs font-medium text-zinc-500 hover:text-zinc-700 bg-zinc-100 hover:bg-zinc-200 rounded-lg transition-colors disabled:opacity-50"
+                      >
+                        取消
+                      </button>
+                      <button
+                        onClick={confirmDelete}
+                        disabled={deletingId === report.id}
+                        className="px-3 py-1 text-xs font-medium text-white bg-red-500 hover:bg-red-600 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-1"
+                      >
+                        {deletingId === report.id && <Loader2 size={12} className="animate-spin" />}
+                        确认删除
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <span className="text-xs text-zinc-400">
+                      {new Date(report.createdAt).toLocaleString('zh-CN')}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      <Link
+                        to={`/reports/${report.id}`}
+                        className="text-xs font-medium text-[var(--forest)] hover:underline"
+                      >
+                        查看详情
+                      </Link>
+                      <button
+                        onClick={() => handleDelete(report.id)}
+                        className="p-1.5 text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
           ))}

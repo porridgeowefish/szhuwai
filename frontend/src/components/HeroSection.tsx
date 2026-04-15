@@ -8,9 +8,18 @@ import {
   X,
   Info,
   Tent,
-  ChevronRight
+  AlertCircle
 } from 'lucide-react';
 import { cn } from '../utils/cn';
+import type { TouchedFields } from '../pages/HomePage';
+
+interface ValidationState {
+  tripDate: boolean;
+  departurePoint: boolean;
+  planTitle: boolean;
+  destination: boolean;
+  file: boolean;
+}
 
 interface HeroSectionProps {
   tripDate: string;
@@ -32,6 +41,12 @@ interface HeroSectionProps {
   isLoading: boolean;
   onGenerate: () => void;
   error: string | null;
+  fileFormatError: string | null;
+  setFileFormatError: (msg: string | null) => void;
+  touched: TouchedFields;
+  validation: ValidationState;
+  isValid: boolean;
+  missingHint: string | null;
 }
 
 export const HeroSection: React.FC<HeroSectionProps> = ({
@@ -53,7 +68,13 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
   setFile,
   isLoading,
   onGenerate,
-  error
+  error,
+  fileFormatError,
+  setFileFormatError,
+  touched,
+  validation,
+  isValid,
+  missingHint
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -63,8 +84,10 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
       const ext = selectedFile.name.split('.').pop()?.toLowerCase();
       if (ext === 'gpx' || ext === 'kml') {
         setFile(selectedFile);
+        setFileFormatError(null);
       } else {
-        alert('请选择 GPX 或 KML 格式的文件');
+        setFile(null);
+        setFileFormatError('请选择 GPX 或 KML 格式的文件');
       }
     }
     if (fileInputRef.current) {
@@ -74,6 +97,7 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
 
   const clearFile = () => {
     setFile(null);
+    setFileFormatError(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -91,7 +115,15 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
     setDeparturePoint(ex.departure);
     setPlanTitle(ex.title);
     setDestination1(ex.dest1);
+    setDestination2('');
+    setDestination3('');
     setAdditionalInfo(ex.info);
+    setFile(null);
+  };
+
+  // 某字段是否应显示错误（touched 且不合法）
+  const showFieldError = (field: keyof TouchedFields, valid: boolean): boolean => {
+    return touched[field] && !valid;
   };
 
   return (
@@ -147,10 +179,20 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <input
                   type="date"
                   value={tripDate}
+                  min={new Date().toISOString().split('T')[0]}
                   onChange={(e) => setTripDate(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl input-nature text-zinc-800"
+                  className={cn(
+                    "w-full px-4 py-3 rounded-xl input-nature text-zinc-800",
+                    showFieldError('tripDate', validation.tripDate) && "border-red-300 focus:border-red-500"
+                  )}
                   disabled={isLoading}
                 />
+                {showFieldError('tripDate', validation.tripDate) && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle size={12} />
+                    请选择出行日期
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <label className="flex items-center gap-2 text-sm font-semibold text-[var(--earth-dark)]">
@@ -162,9 +204,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   value={departurePoint}
                   onChange={(e) => setDeparturePoint(e.target.value)}
                   placeholder="如：成都市武侯区XX小区"
-                  className="w-full px-4 py-3 rounded-xl input-nature text-zinc-800 placeholder:text-zinc-400"
+                  className={cn(
+                    "w-full px-4 py-3 rounded-xl input-nature text-zinc-800 placeholder:text-zinc-400",
+                    showFieldError('departurePoint', validation.departurePoint) && "border-red-300 focus:border-red-500"
+                  )}
                   disabled={isLoading}
                 />
+                {showFieldError('departurePoint', validation.departurePoint) && (
+                  <p className="text-xs text-red-500 flex items-center gap-1">
+                    <AlertCircle size={12} />
+                    请填写出发地点
+                  </p>
+                )}
               </div>
             </div>
 
@@ -179,9 +230,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 value={planTitle}
                 onChange={(e) => setPlanTitle(e.target.value)}
                 placeholder="如：峨眉山金顶环线"
-                className="w-full px-4 py-3 rounded-xl input-nature text-zinc-800 placeholder:text-zinc-400"
+                className={cn(
+                  "w-full px-4 py-3 rounded-xl input-nature text-zinc-800 placeholder:text-zinc-400",
+                  showFieldError('planTitle', validation.planTitle) && "border-red-300 focus:border-red-500"
+                )}
                 disabled={isLoading}
               />
+              {showFieldError('planTitle', validation.planTitle) && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle size={12} />
+                  请输入线路名称
+                </p>
+              )}
             </div>
 
             {/* 行3: 核心目的地 */}
@@ -192,14 +252,19 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                 <span className="text-xs text-zinc-400 font-normal">（至少填写1个）</span>
               </label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <input
-                  type="text"
-                  value={destination1}
-                  onChange={(e) => setDestination1(e.target.value)}
-                  placeholder="目的地1（必填）"
-                  className="w-full px-4 py-2.5 rounded-xl input-nature text-sm text-zinc-800 placeholder:text-zinc-400"
-                  disabled={isLoading}
-                />
+                <div>
+                  <input
+                    type="text"
+                    value={destination1}
+                    onChange={(e) => setDestination1(e.target.value)}
+                    placeholder="目的地1（必填）"
+                    className={cn(
+                      "w-full px-4 py-2.5 rounded-xl input-nature text-sm text-zinc-800 placeholder:text-zinc-400",
+                      showFieldError('destination1', validation.destination) && "border-red-300 focus:border-red-500"
+                    )}
+                    disabled={isLoading}
+                  />
+                </div>
                 <input
                   type="text"
                   value={destination2}
@@ -217,6 +282,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   disabled={isLoading}
                 />
               </div>
+              {showFieldError('destination1', validation.destination) && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle size={12} />
+                  请至少填写一个核心目的地
+                </p>
+              )}
             </div>
 
             {/* 行4: 轨迹文件 */}
@@ -242,7 +313,9 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                     "w-full px-4 py-3 rounded-xl border-2 border-dashed transition-all flex items-center gap-3",
                     file
                       ? "border-[var(--forest)] bg-[var(--forest)]/5"
-                      : "border-[var(--stone-dark)] hover:border-[var(--forest)] hover:bg-[var(--forest)]/5",
+                      : showFieldError('file', validation.file)
+                        ? "border-red-400 bg-red-100/80"
+                        : "border-[var(--stone-dark)] hover:border-[var(--forest)] hover:bg-[var(--forest)]/5",
                     isLoading && "opacity-50 cursor-not-allowed"
                   )}
                 >
@@ -261,6 +334,18 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   </button>
                 )}
               </div>
+              {showFieldError('file', validation.file) && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle size={12} />
+                  请上传轨迹文件
+                </p>
+              )}
+              {fileFormatError && (
+                <p className="text-xs text-red-500 flex items-center gap-1">
+                  <AlertCircle size={12} />
+                  {fileFormatError}
+                </p>
+              )}
             </div>
 
             {/* 行5: 补充要求 */}
@@ -291,9 +376,12 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
             {/* 提交按钮 */}
             <button
               onClick={onGenerate}
-              disabled={isLoading}
+              disabled={isLoading || !isValid}
               className={cn(
-                "w-full py-4 rounded-xl text-white font-bold text-lg flex items-center justify-center gap-2 btn-forest",
+                "w-full py-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-all",
+                isValid
+                  ? "text-white btn-forest"
+                  : "bg-zinc-300 text-zinc-500 cursor-not-allowed",
                 isLoading && "opacity-70 cursor-not-allowed"
               )}
             >
@@ -302,13 +390,22 @@ export const HeroSection: React.FC<HeroSectionProps> = ({
                   <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                   生成中...
                 </>
-              ) : (
+              ) : isValid ? (
                 <>
                   <Navigation size={20} />
                   生成智能策划
                 </>
+              ) : (
+                <>
+                  请完善表单信息
+                </>
               )}
             </button>
+
+            {/* 缺少字段提示 */}
+            {!isValid && missingHint && (
+              <p className="text-xs text-zinc-400 text-center">{missingHint}</p>
+            )}
           </div>
         </div>
 

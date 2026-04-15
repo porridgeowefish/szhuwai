@@ -1,9 +1,84 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { User, Lock, Phone, Shield, Eye, Check, AlertCircle, Loader2 } from 'lucide-react';
+import { User as UserIcon, Lock, Phone, Shield, Eye, EyeOff, Check, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { authAPI } from '../lib/api/auth';
+import type { User } from '../lib/api/types';
 import { cn } from '../utils/cn';
+
+const PHONE_REGEX = /^1[3-9]\d{9}$/;
+
+type PasswordStrengthLevel = 'weak' | 'medium' | 'strong';
+
+interface PasswordStrengthInfo {
+  level: PasswordStrengthLevel;
+  score: number; // 0-3
+  label: string;
+}
+
+function getPasswordStrength(password: string): PasswordStrengthInfo {
+  if (!password) return { level: 'weak', score: 0, label: '' };
+
+  const hasLower = /[a-z]/.test(password);
+  const hasUpper = /[A-Z]/.test(password);
+  const hasDigit = /\d/.test(password);
+  const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+
+  // 弱：< 6 位 或 纯数字/纯字母
+  if (password.length < 6) {
+    return { level: 'weak', score: 1, label: '弱' };
+  }
+  const isOnlyDigits = /^\d+$/.test(password);
+  const isOnlyLetters = /^[a-zA-Z]+$/.test(password);
+  if (isOnlyDigits || isOnlyLetters) {
+    return { level: 'weak', score: 1, label: '弱' };
+  }
+
+  // 强：8+ 位，包含大小写字母、数字和特殊字符
+  if (password.length >= 8 && hasUpper && hasLower && hasDigit && hasSpecial) {
+    return { level: 'strong', score: 3, label: '强' };
+  }
+
+  // 中：6+ 位，包含字母和数字
+  return { level: 'medium', score: 2, label: '中' };
+}
+
+const PasswordStrengthBar: React.FC<{ password: string }> = ({ password }) => {
+  const strength = useMemo(() => getPasswordStrength(password), [password]);
+
+  if (!password) return null;
+
+  const colorMap: Record<PasswordStrengthLevel, string> = {
+    weak: 'bg-red-500',
+    medium: 'bg-amber-400',
+    strong: 'bg-green-500',
+  };
+
+  const textColorMap: Record<PasswordStrengthLevel, string> = {
+    weak: 'text-red-500',
+    medium: 'text-amber-500',
+    strong: 'text-green-600',
+  };
+
+  return (
+    <div className="flex items-center gap-2 mt-1">
+      <div className="flex gap-1">
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className={cn(
+              'h-1.5 w-4 rounded-full transition-colors',
+              i <= strength.score ? colorMap[strength.level] : 'bg-zinc-200'
+            )}
+          />
+        ))}
+      </div>
+      <span className={cn('text-xs font-medium', textColorMap[strength.level])}>
+        {strength.label}
+      </span>
+    </div>
+  );
+};
 
 const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
@@ -27,12 +102,14 @@ const RegisterPage: React.FC = () => {
   const [phoneStatus, setPhoneStatus] = useState<'idle' | 'checking' | 'exists' | 'available'>('idle');
   const checkUsernameRef = useRef<NodeJS.Timeout | null>(null);
   const checkPhoneRef = useRef<NodeJS.Timeout | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // 清理定时器
   useEffect(() => {
     return () => {
       if (checkUsernameRef.current) clearTimeout(checkUsernameRef.current);
       if (checkPhoneRef.current) clearTimeout(checkPhoneRef.current);
+      if (countdownTimerRef.current) clearInterval(countdownTimerRef.current);
     };
   }, []);
 
@@ -45,7 +122,7 @@ const RegisterPage: React.FC = () => {
 
     setUsernameStatus('checking');
     try {
-      const result: any = await authAPI.checkExists({ username });
+      const result = await authAPI.checkExists({ username }) as unknown as { exists: boolean; field?: string };
       if (result?.exists) {
         setUsernameStatus('exists');
       } else {
@@ -59,14 +136,14 @@ const RegisterPage: React.FC = () => {
 
   // 防抖检查手机号是否存在
   const checkPhoneExists = useCallback(async (phone: string) => {
-    if (!phone || !/^1[3-9]\d{9}$/.test(phone)) {
+    if (!phone || !PHONE_REGEX.test(phone)) {
       setPhoneStatus('idle');
       return;
     }
 
     setPhoneStatus('checking');
     try {
-      const result: any = await authAPI.checkExists({ phone });
+      const result = await authAPI.checkExists({ phone }) as unknown as { exists: boolean; field?: string };
       if (result?.exists) {
         setPhoneStatus('exists');
       } else {
@@ -136,7 +213,7 @@ const RegisterPage: React.FC = () => {
         setLoading(false);
         return;
       }
-      if (!formData.phone || !/^1[3-9]\d{9}$/.test(formData.phone)) {
+      if (!formData.phone || !PHONE_REGEX.test(formData.phone)) {
         setError('请输入正确的手机号');
         setLoading(false);
         return;
@@ -150,25 +227,26 @@ const RegisterPage: React.FC = () => {
 
     try {
       if (registerType === 'username') {
-        const registerResult: any = await authAPI.register({ username: formData.username, password: formData.password });
+        const registerResult = await authAPI.register({ username: formData.username, password: formData.password }) as unknown as { accessToken: string; user?: User };
         // 注册成功后使用返回的 token 直接登录
         await login({ username: formData.username, password: formData.password, _token: registerResult.accessToken });
       } else {
-        const registerResult: any = await authAPI.registerWithPhone({ phone: formData.phone, code: formData.code });
+        const registerResult = await authAPI.registerWithPhone({ phone: formData.phone, code: formData.code, password: formData.password || undefined }) as unknown as { accessToken: string; user?: User };
         // 手机号注册后使用返回的 token 直接登录
         await login({ phone: formData.phone, code: formData.code, _token: registerResult.accessToken });
       }
       // 注册成功后跳转到报告中心
       navigate('/reports', { replace: true });
-    } catch (err: any) {
-      setError(err.response?.data?.message || err.message || '注册失败，请稍后重试');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '注册失败，请稍后重试';
+      setError(message);
     } finally {
       setLoading(false);
     }
   };
 
   const handleSendCode = async () => {
-    if (!formData.phone || !/^1[3-9]\d{9}$/.test(formData.phone)) {
+    if (!formData.phone || !PHONE_REGEX.test(formData.phone)) {
       setError('请输入正确的手机号');
       return;
     }
@@ -177,17 +255,25 @@ const RegisterPage: React.FC = () => {
       await authAPI.sendSms(formData.phone, 'register');
       setError(null);
       setCountdown(60);
-      const timer = setInterval(() => {
+      // 清除旧定时器
+      if (countdownTimerRef.current) {
+        clearInterval(countdownTimerRef.current);
+      }
+      countdownTimerRef.current = setInterval(() => {
         setCountdown((prev) => {
           if (prev <= 1) {
-            clearInterval(timer);
+            if (countdownTimerRef.current) {
+              clearInterval(countdownTimerRef.current);
+              countdownTimerRef.current = null;
+            }
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-    } catch (err: any) {
-      setError(err.response?.data?.message || '发送验证码失败');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : '发送验证码失败';
+      setError(message);
     }
   };
 
@@ -249,7 +335,7 @@ const RegisterPage: React.FC = () => {
                 <div className="space-y-2">
                   <label className="text-sm font-semibold text-zinc-700">用户名</label>
                   <div className="relative">
-                    <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
+                    <UserIcon size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
                     <input
                       type="text"
                       value={formData.username}
@@ -296,9 +382,10 @@ const RegisterPage: React.FC = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
                     >
-                      {showPassword ? <Eye size={18} /> : <Eye size={18} className="opacity-50" />}
+                      {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                     </button>
                   </div>
+                  <PasswordStrengthBar password={formData.password} />
                 </div>
 
                 <div className="space-y-2">
@@ -328,7 +415,7 @@ const RegisterPage: React.FC = () => {
                     <input
                       type="tel"
                       value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                      onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/\D/g, '').slice(0, 11) })}
                       className={cn(
                         'w-full pl-10 pr-10 py-3 rounded-xl input-nature',
                         phoneStatus === 'exists' && 'border-red-300 focus:border-red-500'
@@ -401,9 +488,13 @@ const RegisterPage: React.FC = () => {
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600"
                     >
-                      {showPassword ? <Eye size={18} /> : <Eye size={18} className="opacity-50" />}
+                      {showPassword ? <Eye size={18} /> : <EyeOff size={18} />}
                     </button>
                   </div>
+                  <PasswordStrengthBar password={formData.password} />
+                  {!formData.password && (
+                    <p className="text-xs text-zinc-400 mt-1">不设密码将使用手机号 + 验证码登录</p>
+                  )}
                 </div>
               </>
             )}
