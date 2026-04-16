@@ -163,6 +163,30 @@ class APIConfig(BaseModel):
         description="数据库名"
     )
 
+    # PostgreSQL / PostGIS 配置
+    POSTGRES_HOST: str = Field(
+        default="localhost",
+        description="PostgreSQL 主机"
+    )
+    POSTGRES_PORT: int = Field(
+        default=5432,
+        ge=1,
+        le=65535,
+        description="PostgreSQL 端口"
+    )
+    POSTGRES_USER: str = Field(
+        default="outdoor_user",
+        description="PostgreSQL 用户名"
+    )
+    POSTGRES_PASSWORD: str = Field(
+        default="",
+        description="PostgreSQL 密码"
+    )
+    POSTGRES_DATABASE: str = Field(
+        default="outdoor_planner",
+        description="PostgreSQL 数据库名"
+    )
+
     # JWT 配置
     JWT_SECRET_KEY: str = Field(
         default="change-me-in-production",
@@ -300,6 +324,12 @@ class APIConfig(BaseModel):
             "MONGO_USER": "MONGO_USER",
             "MONGO_PASSWORD": "MONGO_PASSWORD",
             "MONGO_DATABASE": "MONGO_DATABASE",
+            # PostgreSQL 环境变量
+            "POSTGRES_HOST": "POSTGRES_HOST",
+            "POSTGRES_PORT": "POSTGRES_PORT",
+            "POSTGRES_USER": "POSTGRES_USER",
+            "POSTGRES_PASSWORD": "POSTGRES_PASSWORD",
+            "POSTGRES_DATABASE": "POSTGRES_DATABASE",
             # 阿里云短信环境变量
             "ALIYUN_ACCESS_KEY_ID": "ALIYUN_ACCESS_KEY_ID",
             "ALIYUN_ACCESS_KEY_SECRET": "ALIYUN_ACCESS_KEY_SECRET",
