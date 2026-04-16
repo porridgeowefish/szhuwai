@@ -69,6 +69,26 @@ services:
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+
+  # ====================================
+  # PostgreSQL + PostGIS 数据库服务
+  # ====================================
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: outdoor-postgres
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DATABASE:-outdoor_planner}
+      POSTGRES_USER: ${POSTGRES_USER:-outdoor_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outdoor_pass_2024}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - outdoor-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U outdoor_user -d outdoor_planner"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -92,6 +112,8 @@ services:
       MYSQL_PORT: 3306
       MONGO_HOST: mongodb
       MONGO_PORT: 27017
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
       # 清除代理配置（Docker 内部访问不需要）
       HTTP_PROXY: ""
       HTTPS_PROXY: ""
@@ -109,6 +131,8 @@ services:
       mongodb:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      postgres:
         condition: service_healthy
 
   # ====================================
@@ -153,3 +177,5 @@ volumes:
     name: outdoor_mysql_data
   redis_data:
     name: outdoor_redis_data
+  postgres_data:
+    name: outdoor_postgres_data

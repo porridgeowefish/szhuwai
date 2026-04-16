@@ -95,6 +95,20 @@ class APIConfig(BaseModel):
         description="LLM API 超时时间（秒）"
     )
 
+    # Agent 配置
+    AGENT_SESSION_TTL: int = Field(
+        default=86400, ge=3600,
+        description="会话历史 TTL（秒）"
+    )
+    AGENT_MAX_HISTORY_TURNS: int = Field(
+        default=20, ge=2, le=50,
+        description="会话保留的最大对话轮数"
+    )
+    AGENT_SUMMARY_THRESHOLD: int = Field(
+        default=10, ge=4,
+        description="触发摘要压缩的对话轮数阈值"
+    )
+
     # MySQL 配置
     MYSQL_HOST: str = Field(
         default="localhost",
@@ -169,6 +183,30 @@ class APIConfig(BaseModel):
         ge=0,
         le=15,
         description="Redis 数据库编号"
+    )
+
+    # PostgreSQL / PostGIS 配置
+    POSTGRES_HOST: str = Field(
+        default="localhost",
+        description="PostgreSQL 主机"
+    )
+    POSTGRES_PORT: int = Field(
+        default=5432,
+        ge=1,
+        le=65535,
+        description="PostgreSQL 端口"
+    )
+    POSTGRES_USER: str = Field(
+        default="outdoor_user",
+        description="PostgreSQL 用户名"
+    )
+    POSTGRES_PASSWORD: str = Field(
+        default="",
+        description="PostgreSQL 密码"
+    )
+    POSTGRES_DATABASE: str = Field(
+        default="outdoor_planner",
+        description="PostgreSQL 数据库名"
     )
 
     # JWT 配置
@@ -313,6 +351,12 @@ class APIConfig(BaseModel):
             "REDIS_PORT": "REDIS_PORT",
             "REDIS_PASSWORD": "REDIS_PASSWORD",
             "REDIS_DB": "REDIS_DB",
+            # PostgreSQL 环境变量
+            "POSTGRES_HOST": "POSTGRES_HOST",
+            "POSTGRES_PORT": "POSTGRES_PORT",
+            "POSTGRES_USER": "POSTGRES_USER",
+            "POSTGRES_PASSWORD": "POSTGRES_PASSWORD",
+            "POSTGRES_DATABASE": "POSTGRES_DATABASE",
             # 阿里云短信环境变量
             "ALIYUN_ACCESS_KEY_ID": "ALIYUN_ACCESS_KEY_ID",
             "ALIYUN_ACCESS_KEY_SECRET": "ALIYUN_ACCESS_KEY_SECRET",
