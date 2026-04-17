@@ -69,6 +69,9 @@ services:
     command: redis-server --appendonly yes
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   # ====================================
   # PostgreSQL + PostGIS 数据库服务
