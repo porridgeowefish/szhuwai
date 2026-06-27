@@ -87,69 +87,24 @@ export default function HomePage() {
     }
   };
 
-  const locate = () => {
+  const locate = async () => {
     setAction('locating');
     setError('');
-    const fallbackToIp = async (reason: string) => {
-      try {
-        const resolved = await planAPI.resolveLocation({ api_config: loadRuntimeConfig() });
-        if (resolved.success && resolved.address) {
-          setDeparturePoint(resolved.address);
-          setError(`${reason}；已使用 IP 定位兜底，位置精度约到城市。`);
-        } else {
-          setError(`${reason}；${resolved.message || 'IP 定位也不可用，请手动填写出发地点。'}`);
-        }
-      } catch (caught) {
-        setError(`${reason}；${readError(caught, 'IP 定位也不可用，请手动填写出发地点。')}`);
-      } finally {
-        setAction('idle');
+    // 浏览器 getCurrentPosition 在桌面/无真实 GPS 环境下走浏览器自带的 IP 库，
+    // 常出现跨城误差（如把深圳的出口 IP 定到辽宁）。出发地仅用于驾车/公交路线规划，
+    // 城市级精度即可，故直接用后端高德 IP 定位（高德 IP 库对国内出口判断更稳）。
+    try {
+      const resolved = await planAPI.resolveLocation({ api_config: loadRuntimeConfig() });
+      if (resolved.success && resolved.address) {
+        setDeparturePoint(resolved.address);
+      } else {
+        setError(resolved.message || '定位不可用，请手动填写出发地点。');
       }
-    };
-
-    if (!window.isSecureContext) {
-      void fallbackToIp('浏览器定位需要 HTTPS 或 localhost 环境');
-      return;
+    } catch (caught) {
+      setError(readError(caught, '定位不可用，请手动填写出发地点。'));
+    } finally {
+      setAction('idle');
     }
-    if (!navigator.geolocation) {
-      void fallbackToIp('当前浏览器不支持定位');
-      return;
-    }
-    navigator.geolocation.getCurrentPosition(
-      async ({ coords }) => {
-        const coordinateText = `${coords.longitude.toFixed(6)}, ${coords.latitude.toFixed(6)}`;
-        if (!config.map_api_key) {
-          setDeparturePoint(coordinateText);
-          setError('已取得坐标；配置高德地图 API Key 后可自动转换为地址');
-          setAction('idle');
-          return;
-        }
-        try {
-          const resolved = await planAPI.resolveLocation({
-            longitude: coords.longitude,
-            latitude: coords.latitude,
-            api_config: loadRuntimeConfig(),
-          });
-          setDeparturePoint(toText(resolved.address || resolved.coordinate_text || coordinateText));
-          if (!resolved.success || resolved.source === 'ip') {
-            setError(resolved.message || '地址反查未取得精确地址，已填入可用定位结果。');
-          }
-        } catch (caught) {
-          setDeparturePoint(coordinateText);
-          setError(`地址反查失败，已填入坐标，你可以继续手动修改：${readError(caught, '后端定位接口不可用')}`);
-        } finally {
-          setAction('idle');
-        }
-      },
-      (geoError) => {
-        const messages: Record<number, string> = {
-          1: '你拒绝了定位权限，请手动填写出发地点',
-          2: '暂时无法取得位置，请手动填写出发地点',
-          3: '定位超时，请重试或手动填写',
-        };
-        void fallbackToIp(messages[geoError.code] || '浏览器定位失败');
-      },
-      { enableHighAccuracy: false, timeout: 10000, maximumAge: 300000 },
-    );
   };
 
   const generate = async () => {
