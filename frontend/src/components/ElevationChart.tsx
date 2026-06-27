@@ -258,7 +258,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
           {props.points.filter(p => p.isKeyPoint).map((point, index) => (
             <div
               key={index}
-              className="absolute rounded border border-zinc-200 bg-white/90 px-1.5 py-0.5 text-[8px] font-semibold text-zinc-700 shadow-sm whitespace-nowrap"
+              className="absolute rounded border border-zinc-200 bg-white/90 px-1 py-0.5 text-[7px] font-semibold text-zinc-700 shadow-sm whitespace-nowrap"
               style={{
                 left: `${getX(point.distanceM)}%`,
                 top: `${(getY(point.elevationM) / chartHeight) * 100}%`,

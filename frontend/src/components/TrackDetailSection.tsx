@@ -196,7 +196,7 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
                 maxElevation={trackDetail.maxElevationM}
                 minElevation={trackDetail.minElevationM}
                 terrainAnalysis={trackDetail.terrainAnalysis}
-                height={180}
+                height={280}
               />
             </div>
 
