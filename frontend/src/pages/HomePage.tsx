@@ -15,12 +15,13 @@ import {
   Monitor,
   Route,
   Settings,
-  ShieldCheck,
+  ShieldCheck, AlertTriangle, XCircle,
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   planAPI,
   type PlanningRunReport,
+  type PlanningStageLog,
   type TrackAnalysis,
   type TwoBuluSessionState,
   type TwoBuluSessionStatus,
@@ -31,6 +32,13 @@ import { loadRuntimeConfig } from '../lib/runtimeConfig';
 const exampleUrl = 'https://www.2bulu.com/track/t-PFdvTj7brIjp%25252FR2KBg5Tzw%25253D%25253D.htm#';
 const terminalStates: TwoBuluSessionState[] = ['ready', 'failed'];
 const runHistoryKey = 'planning-run-history';
+
+const StageStatusIcon = ({ status }: { status: PlanningStageLog['status'] }) => {
+  if (status === 'success') return <CheckCircle2 size={14} className="text-emerald-500" />;
+  if (status === 'degraded') return <AlertTriangle size={14} className="text-amber-500" />;
+  if (status === 'failed') return <XCircle size={14} className="text-rose-500" />;
+  return <Circle size={14} className="text-zinc-300" />;
+};
 
 export default function HomePage() {
   const navigate = useNavigate();
@@ -44,6 +52,7 @@ export default function HomePage() {
   const [runReport, setRunReport] = useState<PlanningRunReport | null>(null);
   const [action, setAction] = useState<'idle' | 'starting' | 'generating' | 'locating'>('idle');
   const [error, setError] = useState('');
+  const [stages, setStages] = useState<PlanningStageLog[]>([]);
   const pollSeqRef = useRef(0);
 
   const config = useMemo(() => loadRuntimeConfig(), []);
@@ -87,24 +96,64 @@ export default function HomePage() {
     }
   };
 
-  const locate = async () => {
+  const locate = () => {
     setAction('locating');
     setError('');
-    // 浏览器 getCurrentPosition 在桌面/无真实 GPS 环境下走浏览器自带的 IP 库，
-    // 常出现跨城误差（如把深圳的出口 IP 定到辽宁）。出发地仅用于驾车/公交路线规划，
-    // 城市级精度即可，故直接用后端高德 IP 定位（高德 IP 库对国内出口判断更稳）。
-    try {
-      const resolved = await planAPI.resolveLocation({ api_config: loadRuntimeConfig() });
-      if (resolved.success && resolved.address) {
-        setDeparturePoint(resolved.address);
-      } else {
-        setError(resolved.message || '定位不可用，请手动填写出发地点。');
+    const fallbackToIp = async (reason: string) => {
+      try {
+        const resolved = await planAPI.resolveLocation({ api_config: loadRuntimeConfig() });
+        if (resolved.success && resolved.address) {
+          setDeparturePoint(resolved.address);
+          setError(`${reason}；已用 IP 定位兜底（精度仅到城市，若不准请手动修改出发地点）。`);
+        } else {
+          setError(`${reason}；${resolved.message || 'IP 定位也不可用，请手动填写出发地点。'}`);
+        }
+      } catch (caught) {
+        setError(`${reason}；${readError(caught, 'IP 定位也不可用，请手动填写出发地点。')}`);
+      } finally {
+        setAction('idle');
       }
-    } catch (caught) {
-      setError(readError(caught, '定位不可用，请手动填写出发地点。'));
-    } finally {
-      setAction('idle');
+    };
+
+    // 优先用浏览器高精度定位（手机真实 GPS 能定到所在城市）；失败/拒绝/不支持时 IP 兜底。
+    // IP 定位基于网络出口，常与实际位置差一个城市，仅作兜底。
+    if (!window.isSecureContext) {
+      void fallbackToIp('浏览器定位需要 HTTPS 或 localhost 环境');
+      return;
     }
+    if (!navigator.geolocation) {
+      void fallbackToIp('当前浏览器不支持定位');
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async ({ coords }) => {
+        try {
+          const resolved = await planAPI.resolveLocation({
+            longitude: coords.longitude,
+            latitude: coords.latitude,
+            api_config: loadRuntimeConfig(),
+          });
+          if (resolved.success && resolved.address) {
+            setDeparturePoint(toText(resolved.address));
+          } else {
+            setError(resolved.message || '地址反查未取得精确地址，若不准请手动修改出发地点。');
+          }
+        } catch (caught) {
+          setError(`地址反查失败，请手动填写：${readError(caught, '后端定位接口不可用')}`);
+        } finally {
+          setAction('idle');
+        }
+      },
+      (geoError) => {
+        const messages: Record<number, string> = {
+          1: '你拒绝了定位权限，请手动填写出发地点',
+          2: '暂时无法取得位置，请手动填写出发地点',
+          3: '定位超时，请重试或手动填写',
+        };
+        void fallbackToIp(messages[geoError.code] || '浏览器定位失败');
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
   };
 
   const generate = async () => {
@@ -114,16 +163,20 @@ export default function HomePage() {
     }
     setAction('generating');
     setError('');
+    setStages([]);
     try {
-      const result = await planAPI.generate({
-        two_bulu_url: url.trim(),
-        two_bulu_session_id: session.session_id,
-        trip_date: tripDate || null,
-        departure_point: departurePointText.trim() || null,
-        additional_info: additionalInfo.trim(),
-        api_config: loadRuntimeConfig(),
-        generation_mode: 'fast',
-      });
+      const result = await planAPI.streamGenerate(
+        {
+          two_bulu_url: url.trim(),
+          two_bulu_session_id: session.session_id,
+          trip_date: tripDate || null,
+          departure_point: departurePointText.trim() || null,
+          additional_info: additionalInfo.trim(),
+          api_config: loadRuntimeConfig(),
+          generation_mode: 'fast',
+        },
+        (stage) => setStages((prev) => [...prev, stage]),
+      );
       setTrackAnalysis(result.track_analysis);
       setRunReport(result.run_report);
       saveRunReport(result.run_report);
@@ -214,6 +267,27 @@ export default function HomePage() {
               mapReady={Boolean(config.map_api_key)}
               llmReady={Boolean(config.llm_api_key)}
             />
+
+            {action === 'generating' ? (
+              <div className="mt-4 rounded-xl border border-[var(--border)] bg-zinc-50 p-4">
+                <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-[var(--primary)]">
+                  <LoaderCircle className="animate-spin" size={16} />
+                  正在生成策划…
+                </div>
+                <ul className="grid gap-1.5">
+                  {stages.map((s, i) => (
+                    <li key={i} className="flex items-center gap-2 text-xs text-zinc-600">
+                      <StageStatusIcon status={s.status} />
+                      <span className="font-semibold text-zinc-800">{s.title}</span>
+                      {s.message ? <span className="text-[var(--muted)]">{s.message}</span> : null}
+                      {s.duration_ms > 0 ? (
+                        <span className="ml-auto font-mono text-[var(--muted)]">{(s.duration_ms / 1000).toFixed(1)}s</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {error ? <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-[var(--danger)]">{error}</div> : null}
 

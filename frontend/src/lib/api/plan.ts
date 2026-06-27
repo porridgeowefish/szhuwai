@@ -87,6 +87,21 @@ export interface WebInsightResult {
   message: string;
 }
 
+function parseSSE(raw: string): { event: string; data: unknown } | null {
+  let event = 'message';
+  const dataLines: string[] = [];
+  for (const line of raw.split('\n')) {
+    if (line.startsWith('event:')) event = line.slice(6).trim();
+    else if (line.startsWith('data:')) dataLines.push(line.slice(5).trim());
+  }
+  if (dataLines.length === 0) return null;
+  try {
+    return { event, data: JSON.parse(dataLines.join('\n')) };
+  } catch {
+    return null;
+  }
+}
+
 export const planAPI = {
   inspect: async (url: string): Promise<TwoBuluTrackInfo> => {
     const response = await apiClient.post<TwoBuluTrackInfo>('/two-bulu/inspect', { url });
@@ -103,6 +118,39 @@ export const planAPI = {
   generate: async (payload: PlanGeneratePayload): Promise<PlanGenerateResult> => {
     const response = await apiClient.post<PlanGenerateResult>('/plan/generate', payload);
     return response.data;
+  },
+  streamGenerate: async (
+    payload: PlanGeneratePayload,
+    onStage: (stage: PlanningStageLog) => void,
+  ): Promise<PlanGenerateResult> => {
+    const resp = await fetch('/api/v1/plan/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok || !resp.body) throw new Error(`生成请求失败（${resp.status}）`);
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+    let result: PlanGenerateResult | null = null;
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep = buffer.indexOf('\n\n');
+      while (sep >= 0) {
+        const evt = parseSSE(buffer.slice(0, sep));
+        buffer = buffer.slice(sep + 2);
+        if (evt) {
+          if (evt.event === 'stage') onStage(evt.data as PlanningStageLog);
+          else if (evt.event === 'result') result = evt.data as PlanGenerateResult;
+          else if (evt.event === 'error') throw new Error((evt.data as { detail?: string }).detail || '生成失败');
+        }
+        sep = buffer.indexOf('\n\n');
+      }
+    }
+    if (!result) throw new Error('未收到生成结果');
+    return result;
   },
   resolveLocation: async (
     payload: { longitude?: number; latitude?: number; api_config: RuntimeAPIConfig },

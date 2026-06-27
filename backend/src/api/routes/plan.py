@@ -1,12 +1,16 @@
 """匿名户外策划接口。"""
 
+import json
+import queue
+import threading
 from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 import os
 from time import perf_counter
-from typing import Callable, Literal, TypeVar
+from typing import Callable, Iterator, Literal, TypeVar
 from uuid import uuid4
 
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, HttpUrl
 
 from src.schemas.planning_run import PlanningRunReport, PlanningStageLog, StageStatus
@@ -84,17 +88,50 @@ def synthesize_insight(payload: InsightRequest) -> InsightResponse:
     return InsightResponse(success=True, summary=insight.summary)
 
 
-@router.post(
-    "/generate",
-    response_model=PlanGenerateResponse,
-    response_model_by_alias=True,
-)
-def generate_plan(payload: PlanGenerateRequest) -> PlanGenerateResponse:
-    """消费真实浏览器下载文件；缺少日期或出发地时只分析轨迹。"""
+@router.post("/generate")
+def generate_plan(payload: PlanGenerateRequest) -> StreamingResponse:
+    """SSE 流式生成：实时推送每个阶段进度，最后推送完整结果。
 
+    事件流：
+    - ``event: stage``  data: PlanningStageLog —— 某个阶段完成
+    - ``event: result`` data: PlanGenerateResponse —— 最终完整结果
+    - ``event: error``  data: {detail} —— 失败
+    """
+    q: "queue.Queue[tuple[str, object] | None]" = queue.Queue()
+
+    def worker() -> None:
+        try:
+            result = _run_generate(payload, on_stage=lambda s: q.put(("stage", s)))
+            q.put(("result", result))
+        except HTTPException as exc:
+            q.put(("error", {"status": exc.status_code, "detail": exc.detail}))
+        except Exception as exc:  # noqa: BLE001 - 任何异常都通过事件流告知前端
+            q.put(("error", {"detail": str(exc)}))
+        finally:
+            q.put(None)
+
+    threading.Thread(target=worker, daemon=True).start()
+
+    def event_stream() -> Iterator[str]:
+        while True:
+            item = q.get()
+            if item is None:
+                break
+            kind, data = item
+            dumped = data.model_dump(mode="json", by_alias=True) if hasattr(data, "model_dump") else data
+            yield f"event: {kind}\ndata: {json.dumps(dumped, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+
+def _run_generate(
+    payload: PlanGenerateRequest,
+    on_stage: Callable[[PlanningStageLog], None],
+) -> PlanGenerateResponse:
+    """实际生成逻辑：消费浏览器下载的轨迹文件，缺少日期或出发地时只分析轨迹。"""
     run_id = f"run_{uuid4().hex[:12]}"
     run_started = perf_counter()
-    stages: list[PlanningStageLog] = []
+    stages: _StageList = _StageList(on_stage)
     warnings: list[str] = []
 
     try:
@@ -311,15 +348,29 @@ def _record_stage(
     title: str,
     action: Callable[[], T],
     success_message: str,
+    on_stage: Callable[[PlanningStageLog], None] | None = None,
 ) -> T:
     started = perf_counter()
     try:
         result = action()
     except Exception as exc:
-        _append_stage(stages, stage, title, "failed", _elapsed_ms(started), str(exc))
+        _append_stage(stages, stage, title, "failed", _elapsed_ms(started), str(exc), on_stage=on_stage)
         raise
-    _append_stage(stages, stage, title, "success", _elapsed_ms(started), success_message)
+    _append_stage(stages, stage, title, "success", _elapsed_ms(started), success_message, on_stage=on_stage)
     return result
+
+
+class _StageList(list[PlanningStageLog]):
+    """stage 列表：append 时自动触发 on_stage 回调（用于 SSE 实时推送每个阶段）。"""
+
+    def __init__(self, on_stage: Callable[[PlanningStageLog], None] | None = None) -> None:
+        super().__init__()
+        self._on_stage = on_stage
+
+    def append(self, log: PlanningStageLog) -> None:
+        super().append(log)
+        if self._on_stage is not None:
+            self._on_stage(log)
 
 
 def _append_stage(
@@ -329,14 +380,18 @@ def _append_stage(
     status: StageStatus,
     duration_ms: int,
     message: str,
+    on_stage: Callable[[PlanningStageLog], None] | None = None,
 ) -> None:
-    stages.append(PlanningStageLog(
+    log = PlanningStageLog(
         stage=stage,
         title=title,
         status=status,
         duration_ms=duration_ms,
         message=message,
-    ))
+    )
+    stages.append(log)
+    if on_stage is not None:
+        on_stage(log)
 
 
 def _elapsed_ms(started: float) -> int:
