@@ -200,8 +200,8 @@ class GeocodeResult(TransportBaseModel):
     @field_validator('adcode')
     @classmethod
     def validate_adcode(cls, v: str) -> str:
-        """验证行政区划代码格式"""
-        if not v.isdigit() or len(v) not in [6, 12]:
+        """验证行政区划代码格式（空值允许——高德对境外坐标返回空 adcode）"""
+        if v and (not v.isdigit() or len(v) not in [6, 12]):
             raise ValueError("行政区划代码必须是6位或12位数字")
         return v
 
@@ -252,8 +252,8 @@ class ReverseGeocodeResult(TransportBaseModel):
     @field_validator('adcode')
     @classmethod
     def validate_adcode(cls, v: str) -> str:
-        """验证行政区划代码格式"""
-        if not v.isdigit() or len(v) not in [6, 12]:
+        """验证行政区划代码格式（空值允许——高德对境外坐标返回空 adcode）"""
+        if v and (not v.isdigit() or len(v) not in [6, 12]):
             raise ValueError("行政区划代码必须是6位或12位数字")
         return v
 
