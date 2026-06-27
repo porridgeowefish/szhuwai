@@ -1,8 +1,6 @@
 """V2 策划生成接口测试。"""
 
-import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,20 +9,7 @@ from src.api.config import APIConfig
 from src.services.two_bulu_browser_service import session_manager
 from src.services.two_bulu_service import TwoBuluService
 
-
-def _parse_sse_result(response_text: str) -> dict[str, Any]:
-    """从 SSE 事件流文本中提取 result 事件的 data。"""
-    for block in response_text.split("\n\n"):
-        event_name = ""
-        data_lines: list[str] = []
-        for line in block.split("\n"):
-            if line.startswith("event:"):
-                event_name = line[len("event:"):].strip()
-            elif line.startswith("data:"):
-                data_lines.append(line[len("data:"):].strip())
-        if event_name == "result" and data_lines:
-            return json.loads("\n".join(data_lines))
-    raise AssertionError("SSE 流中未找到 result 事件")
+from ._sse import parse_sse_event
 
 
 def test_generate_plan_returns_quick_plan_without_optional_api_keys(
@@ -59,7 +44,7 @@ def test_generate_plan_returns_quick_plan_without_optional_api_keys(
     )
 
     assert response.status_code == 200
-    data = _parse_sse_result(response.text)
+    data = parse_sse_event(response.text, "result")
     assert data["mode"] == "quick_plan"
     assert data["plan"]["planName"]
     assert data["plan"]["trackDetail"]["totalDistanceKm"] > 0

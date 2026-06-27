@@ -8,6 +8,8 @@ from src.schemas.base import Point3D
 from src.schemas.track import TrackAnalysisResult
 from src.schemas.two_bulu import TwoBuluSessionState, TwoBuluSessionStatus
 
+from ._sse import parse_sse_event
+
 
 def test_inspect_two_bulu_url(client: TestClient) -> None:
     response = client.post(
@@ -63,8 +65,11 @@ def test_plan_rejects_unfinished_browser_session(client: TestClient, mocker) -> 
         },
     )
 
-    assert response.status_code == 409
-    assert response.json()["detail"] == "授权尚未完成"
+    # /plan/generate 为 SSE 流：业务错误以 200 + event:error 下发（data 携带原状态码）
+    assert response.status_code == 200
+    error = parse_sse_event(response.text, "error")
+    assert error["status"] == 409
+    assert error["detail"] == "授权尚未完成"
 
 
 def test_plan_uses_downloaded_session_file(client: TestClient, mocker, tmp_path: Path) -> None:
@@ -107,5 +112,6 @@ def test_plan_uses_downloaded_session_file(client: TestClient, mocker, tmp_path:
         },
     )
 
+    # /plan/generate 为 SSE 流：结果以 event:result 下发
     assert response.status_code == 200
-    assert response.json()["mode"] == "track_only"
+    assert parse_sse_event(response.text, "result")["mode"] == "track_only"
