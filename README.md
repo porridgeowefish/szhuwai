@@ -1,4 +1,5 @@
 # 户外策划
+本项目能够极大缩短户外计划策划书的制定周期。
 
 粘贴两步路线路 URL，系统打开真实浏览器授权窗口；用户扫码登录并手动完成平台验证码后，系统自动下载 KML/GPX，并基于真实轨迹生成户外策划。
 
@@ -13,7 +14,12 @@
 - 日期或出发地缺失时仅生成轨迹分析，不捏造天气和交通信息。
 
 ## 本地运行
-
+### Agent代操作（推荐）
+面向任何一款Agent(如Workbuddy,Trae,Qoder,Claude Code,Codex,Hermes,Openclaw)等等，发送如下指令:
+```
+前往https://github.com/porridgeowefish/szhuwai, 克隆仓库后，按照README帮我配置好运行环境和告知用户如何运行和使用（用通俗的语言）。
+```
+### 手动部署
 后端：
 
 ```bash
