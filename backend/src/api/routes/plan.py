@@ -50,6 +50,40 @@ class PlanGenerateResponse(BaseModel):
     run_report: PlanningRunReport
 
 
+class InsightRequest(BaseModel):
+    """AI 概括异步补充请求：基于主结果已返回的搜索参考资料提炼沿途攻略。"""
+
+    keywords: str = Field(min_length=1, max_length=200)
+    references: list[WebReference] = Field(default_factory=list)
+    api_config: RuntimeAPIConfig = Field(default_factory=RuntimeAPIConfig)
+
+
+class InsightResponse(BaseModel):
+    """AI 概括结果。"""
+
+    success: bool
+    summary: str = ""
+    message: str = ""
+
+
+@router.post("/insight", response_model=InsightResponse)
+def synthesize_insight(payload: InsightRequest) -> InsightResponse:
+    """主结果返回后由前端单独调用，调 LLM 提炼沿途风光/攻略摘要（慢，不阻塞主流程）。"""
+    if not payload.references:
+        return InsightResponse(success=False, message="没有搜索参考资料，跳过 AI 提炼。")
+    api_client_config = payload.api_config.to_api_config()
+    if not api_client_config.LLM_API_KEY:
+        return InsightResponse(success=False, message="未配置 AI Key，跳过 AI 提炼。")
+    try:
+        search_service = SearchService(api_client_config)  # type: ignore[no-untyped-call]
+        insight = search_service.synthesize_from_references(payload.keywords, payload.references)
+    except Exception as exc:  # noqa: BLE001 - AI 提炼失败不影响已展示的主结果
+        return InsightResponse(success=False, message=f"AI 提炼失败：{exc}")
+    if not insight.summary:
+        return InsightResponse(success=False, message="AI 提炼未返回有效摘要。")
+    return InsightResponse(success=True, summary=insight.summary)
+
+
 @router.post(
     "/generate",
     response_model=PlanGenerateResponse,
@@ -141,9 +175,10 @@ def _generate_quick_plan(
     weather_data: WeatherSummary | None = None
     transport_data: TransportRoutes | None = None
     rescue_points: list[dict[str, object]] = []
-    scenic_context: list[str] = []
     web_references: list[WebReference] = []
     web_insight: WebSearchInsight | None = None
+    search_service: SearchService | None = None
+    search_keywords: str = ""
 
     with ThreadPoolExecutor(max_workers=4) as executor:
         future_to_stage: dict[Future[object], tuple[str, str, float]] = {}
@@ -174,14 +209,10 @@ def _generate_quick_plan(
             future_to_stage[
                 executor.submit(transport_service.search_around_rescue, start_point.lon, start_point.lat)
             ] = ("rescue_fetch", "救援点查询", perf_counter())
-            future_to_stage[
-                executor.submit(transport_service.collect_scenic_context, start_point.lon, start_point.lat)
-            ] = ("scenic_context", "景观线索", perf_counter())
         else:
             warnings.append("未配置高德地图 API Key，已跳过交通与周边救援查询。")
             _append_stage(stages, "transport_fetch", "交通增强", "skipped", 0, "未配置高德地图 API Key")
             _append_stage(stages, "rescue_fetch", "救援点查询", "skipped", 0, "未配置高德地图 API Key")
-            _append_stage(stages, "scenic_context", "景观线索", "skipped", 0, "未配置高德地图 API Key")
 
         # 网络搜索：与天气/交通并行拉取，不阻塞主结果。SearchClient 会在 Jina 缺 key 时
         # 自动降级到 Tavily，故只要存在任一搜索 key 即可触发。
@@ -190,7 +221,7 @@ def _generate_quick_plan(
             search_keywords = (track_analysis.track_name or "户外徒步").strip()
             search_service = SearchService(api_client_config)  # type: ignore[no-untyped-call]
             future_to_stage[
-                executor.submit(search_service.search_with_insight, search_keywords)
+                executor.submit(search_service.search, search_keywords)
             ] = ("search_fetch", "网络搜索", perf_counter())
         else:
             warnings.append("未配置搜索 API Key，已跳过网络搜索。")
@@ -219,16 +250,8 @@ def _generate_quick_plan(
                 if isinstance(result, list):
                     rescue_points = [item for item in result if isinstance(item, dict)]
                 _append_stage(stages, stage, title, "success", _elapsed_ms(started), f"找到 {len(rescue_points)} 个周边救援点")
-            elif stage == "scenic_context":
-                if isinstance(result, list):
-                    scenic_context = [str(item) for item in result if str(item).strip()]
-                _append_stage(stages, stage, title, "success", _elapsed_ms(started), f"收集 {len(scenic_context)} 条高德景观线索")
             elif stage == "search_fetch":
-                if isinstance(result, tuple) and len(result) == 2:
-                    responses, insight = result
-                    web_references = _flatten_search_results(responses) if isinstance(responses, list) else []
-                    web_insight = insight if isinstance(insight, WebSearchInsight) else None
-                elif isinstance(result, list):
+                if isinstance(result, list):
                     web_references = _flatten_search_results(result)
                 _append_stage(
                     stages,
@@ -236,15 +259,11 @@ def _generate_quick_plan(
                     title,
                     "success",
                     _elapsed_ms(started),
-                    f"找到 {len(web_references)} 条网络参考，并完成摘要提炼" if web_insight else f"找到 {len(web_references)} 条网络参考",
+                    f"找到 {len(web_references)} 条网络参考",
                 )
 
-        if web_insight and scenic_context and "高德周边线索" not in web_insight.summary:
-            scenic_text = "高德周边线索：" + "、".join(scenic_context[:6])
-            web_insight.summary = f"{scenic_text}；{web_insight.summary}" if web_insight.summary else scenic_text
-        elif scenic_context and web_insight is None:
-            web_insight = WebSearchInsight(summary="高德周边线索：" + "、".join(scenic_context[:6]))
-
+        # 搜索结果 + 高德周边线索统一交给 LLM 过滤提炼（高德线索也过 AI，避免 POI 等术语外漏）。
+        # 仅在执行过网络搜索时触发；LLM 不可用时 synthesize_insight 内部降级为本地摘要。
     return _record_stage(
         stages,
         stage="quick_synthesis",

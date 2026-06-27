@@ -4,13 +4,14 @@ import {
   ShieldAlert, CloudSun, MapPin, Backpack, Navigation, PhoneCall, Clock,
   Thermometer, Wind, Droplets, Sun, AlertTriangle, CheckCircle2, Info,
   Mountain, ArrowUp, Snowflake, Download, Image as ImageIcon, Map as MapIcon,
-  List, ClipboardCheck
+  List, ClipboardCheck, ChevronDown, Loader2
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { PlanData, SafetyIssue, EquipmentItem } from '../types';
-import type { PlanningRunReport } from '../lib/api/plan';
+import { planAPI, type PlanningRunReport } from '../lib/api/plan';
+import { loadRuntimeConfig } from '../lib/runtimeConfig';
 import { calculateFeelsLike, calculateWindChill, windScaleToSpeed, getWindChillRisk } from '../utils/weather';
 import { exportToLongImage, exportToPDF } from '../utils/pdf';
 import { cn } from '../utils/cn';
@@ -114,6 +115,10 @@ const ReportDetailPage: React.FC = () => {
   const [exporting, setExporting] = useState<null | 'image' | 'pdf'>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>('');
+  const [showWebRefs, setShowWebRefs] = useState(false);
+  const [insightSummary, setInsightSummary] = useState('');
+  const [insightLoading, setInsightLoading] = useState(false);
+  const [insightError, setInsightError] = useState('');
 
   // 从路由 state 获取计划数据，或从 API 获取
   const statePlan = location.state?.plan as PlanData | null;
@@ -157,6 +162,32 @@ const ReportDetailPage: React.FC = () => {
       { id: 'section-equipment', label: '装备清单', icon: Backpack },
     );
     return items;
+  }, [plan]);
+
+  // 后端 plan/generate 不再阻塞等 LLM；拿到主结果后异步补取 AI 提炼的沿途攻略摘要。
+  useEffect(() => {
+    if (!plan) return;
+    const references = plan.webReferences || [];
+    if (plan.webSummary?.trim() || references.length === 0) return;
+    let cancelled = false;
+    setInsightLoading(true);
+    setInsightError('');
+    planAPI
+      .synthesizeInsight({ keywords: plan.planName, references, api_config: loadRuntimeConfig() })
+      .then((res) => {
+        if (cancelled) return;
+        if (res.success && res.summary) setInsightSummary(res.summary);
+        else setInsightError(res.message || 'AI 提炼未返回结果');
+      })
+      .catch(() => {
+        if (!cancelled) setInsightError('AI 提炼请求失败，可参考下方来源');
+      })
+      .finally(() => {
+        if (!cancelled) setInsightLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [plan]);
 
   // IntersectionObserver 实现 scroll spy（单一 observer 监听所有 section）
@@ -243,6 +274,7 @@ const ReportDetailPage: React.FC = () => {
   const rescueContacts = plan.emergencyRescueContacts || [];
   const hasRealWeather = tripDateWeather.textDay !== '暂无天气数据' && Boolean(plan.tripDateWeather);
   const webSummary = plan.webSummary?.trim();
+  const displaySummary = webSummary || insightSummary;
   const weatherBasePoint = criticalGridWeather.find((grid) => grid.pointType === '地区基准') || criticalGridWeather[0];
   const representativeTemp = weatherBasePoint?.temp ?? Math.round((tripDateWeather.tempMax + tripDateWeather.tempMin) / 2);
   const dailyWindSpeed = windScaleToSpeed(tripDateWeather.windScaleDay);
@@ -534,16 +566,30 @@ const ReportDetailPage: React.FC = () => {
               <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                 <div>
                   <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">沿途风光与网络洞察</h3>
-                  {webSummary ? <p className="mt-2 text-sm leading-7 text-zinc-700">{webSummary}</p> : null}
+                  {displaySummary ? (
+                    <p className="mt-2 text-sm leading-7 text-zinc-700">{displaySummary}</p>
+                  ) : insightLoading ? (
+                    <div className="mt-2 flex items-center gap-2 text-sm text-zinc-400">
+                      <Loader2 size={14} className="animate-spin" />
+                      <span>AI 正在提炼沿途攻略与风光洞察…</span>
+                    </div>
+                  ) : insightError ? (
+                    <p className="mt-2 text-xs text-zinc-400">{insightError}</p>
+                  ) : null}
                 </div>
                 {webReferences.length > 0 ? (
-                  <span className="shrink-0 rounded-full bg-[var(--forest)]/10 px-3 py-1 text-xs font-bold text-[var(--forest)]">
-                    {webReferences.length} 条来源
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setShowWebRefs((v) => !v)}
+                    className="shrink-0 inline-flex items-center gap-1 rounded-full bg-[var(--forest)]/10 px-3 py-1 text-xs font-bold text-[var(--forest)] hover:bg-[var(--forest)]/20 transition-colors"
+                  >
+                    <ChevronDown size={12} className={cn('transition-transform', showWebRefs && 'rotate-180')} />
+                    {showWebRefs ? '收起来源' : `展开 ${webReferences.length} 条来源`}
+                  </button>
                 ) : null}
               </div>
-              {webSummary || webReferences.length > 0 ? (
-                webReferences.length > 0 ? (
+              {displaySummary || webReferences.length > 0 ? (
+                showWebRefs && webReferences.length > 0 ? (
                   <ul className="grid gap-3 md:grid-cols-2">
                     {webReferences.map((item) => (
                       <li key={item.url} className="rounded-xl border border-[var(--stone)] p-3">

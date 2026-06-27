@@ -1,5 +1,5 @@
 import apiClient from './client';
-import type { PlanData } from '../../types';
+import type { PlanData, WebReference } from '../../types';
 import type { RuntimeAPIConfig } from '../runtimeConfig';
 
 export interface TwoBuluTrackInfo {
@@ -81,6 +81,12 @@ export interface LocationResolveResult {
   message: string;
 }
 
+export interface WebInsightResult {
+  success: boolean;
+  summary: string;
+  message: string;
+}
+
 export const planAPI = {
   inspect: async (url: string): Promise<TwoBuluTrackInfo> => {
     const response = await apiClient.post<TwoBuluTrackInfo>('/two-bulu/inspect', { url });
@@ -102,6 +108,12 @@ export const planAPI = {
     payload: { longitude?: number; latitude?: number; api_config: RuntimeAPIConfig },
   ): Promise<LocationResolveResult> => {
     const response = await apiClient.post<LocationResolveResult>('/location/resolve', payload);
+    return response.data;
+  },
+  synthesizeInsight: async (
+    payload: { keywords: string; references: WebReference[]; api_config: RuntimeAPIConfig },
+  ): Promise<WebInsightResult> => {
+    const response = await apiClient.post<WebInsightResult>('/plan/insight', payload);
     return response.data;
   },
 };

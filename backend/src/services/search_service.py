@@ -13,6 +13,7 @@ import requests
 
 from loguru import logger
 
+from src.schemas.output import WebReference
 from src.schemas.search import SearchEmergencyContact, WebSearchInsight, WebSearchResponse
 from src.api.search_client import SearchClient
 
@@ -61,27 +62,44 @@ class SearchService:
 
         return all_results
 
-    def search_with_insight(
+    def synthesize_insight(
         self,
         keywords: str,
-        search_types: List[str] = None,
-        max_results: int = 5,
+        responses: List[WebSearchResponse],
         local_context: list[str] | None = None,
-    ) -> tuple[List[WebSearchResponse], WebSearchInsight]:
-        """搜索并提炼为报告可读的沿途风光/攻略/应急摘要。
+    ) -> WebSearchInsight:
+        """把搜索结果 + 高德周边线索统一交给 LLM 过滤提炼为行前洞察。
 
-        LLM 失败时降级为本地摘要，主流程不因 AI 阻塞。
+        - 高德线索也在此一并交给 LLM 消化（而非调用方硬拼），避免 POI 等术语外漏；
+        - LLM 不可用或失败时降级为本地摘要，绝不抛错，不阻塞主流程。
         """
-        responses = self.search(keywords, search_types, max_results)
-        insight = self._summarize_with_llm(keywords, responses, local_context or [])
+        ctx = [self._clean_term(c) for c in (local_context or []) if c and c.strip()]
+        insight = self._summarize_with_llm(keywords, responses, ctx)
         if not insight.summary:
-            insight = self._fallback_insight(responses, local_context or [])
-        return responses, insight
+            insight = self._fallback_insight(responses, ctx)
+        return insight
+
+    def synthesize_from_references(
+        self,
+        keywords: str,
+        references: List[WebReference],
+    ) -> WebSearchInsight:
+        """主结果返回后的异步补充：基于前端回传的网络参考资料调 LLM 提炼摘要。
+
+        与 synthesize_insight 的区别：输入是 WebReference（标题+摘要）而非完整搜索响应，
+        且不携带高德景观线索（减少噪音）。LLM 不可用/失败时用参考摘要简单拼接降级。
+        """
+        materials = self._format_references(references)
+        insight = self._llm_synthesize(keywords, materials, [])
+        if not insight.summary:
+            snippets = [r.snippet for r in references[:3] if r.snippet]
+            insight = WebSearchInsight(summary="；".join(snippets))
+        return insight
 
     def _build_search_queries(self, keywords: str, search_types: List[str]) -> List[str]:
         """构建搜索查询列表"""
         queries = []
-        platform_filter = "(site:www.baidu.com OR site:douyin.com OR site:bilibili.com OR site:xiaohongshu.com)"
+        platform_filter = "(site:www.baidu.com OR site:douyin.com OR site:xiaohongshu.com)"
 
         if '景点' in search_types:
             queries.append(f"{keywords} 景点 景区 旅游 {platform_filter}")
@@ -103,27 +121,38 @@ class SearchService:
         responses: List[WebSearchResponse],
         local_context: list[str],
     ) -> WebSearchInsight:
-        """调用 OpenAI-compatible LLM 做保守摘要。"""
-        config = self.client.config
-        if not config.LLM_API_KEY:
-            return WebSearchInsight()
-
+        """对完整搜索响应格式化后交给 LLM 提炼。"""
         materials = self._format_search_materials(responses)
         if not materials:
             return WebSearchInsight()
+        return self._llm_synthesize(keywords, materials, local_context)
+
+    def _llm_synthesize(
+        self,
+        keywords: str,
+        materials: str,
+        local_context: list[str],
+    ) -> WebSearchInsight:
+        """核心 LLM 调用：基于已格式化的材料字符串提炼行前洞察（失败返回空，由调用方降级）。"""
+        config = self.client.config
+        if not config.LLM_API_KEY or not materials:
+            return WebSearchInsight()
 
         system_prompt = (
-            "你是户外行前信息核验助手。必须仅基于用户提供的搜索材料回答，"
-            "严禁捏造、补全或使用材料之外的信息。没有可靠信息时写“未检索到可靠信息”。"
+            "你是户外行前攻略编辑。只能基于用户提供的搜索材料与属地线索撰写，"
+            "严禁捏造或使用材料之外的信息，没有可靠信息就写“未检索到可靠信息”。"
+            "三条铁律：①用通俗口语，像有经验的领队在交代注意事项；"
+            "②禁止出现 POI、坐标、逆地理、GIS、瓦片等任何技术术语，地名机构一律用大白话；"
+            "③只保留与这条线路直接相关的风光、攻略、注意点，无关内容一律丢弃，不要罗列来源。"
             "输出 JSON，不要 Markdown。"
         )
         user_prompt = (
             f"线路关键词：{keywords}\n"
-            "请从材料中提炼：1）沿途风光/地貌/人文线索；2）实际攻略要点；"
-            "3）应急电话或救援机构。多个相同电话只保留一个。\n"
-            "JSON 格式：{\"summary\":\"不超过220字\","
+            "请综合下方材料，提炼一段连贯的行前洞察（沿途风光 + 实用攻略 + 注意点），"
+            "并单独列出应急电话；与线路无关的内容不要写进 summary。\n"
+            "JSON 格式：{\"summary\":\"不超过220字的口语化洞察\","
             "\"emergency_contacts\":[{\"name\":\"机构名\",\"phone\":\"电话\",\"contact_type\":\"医疗/救援/报警\"}]}\n"
-            f"高德逆地理/周边景观线索：{'；'.join(local_context[:12]) or '无'}\n"
+            f"属地与周边线索：{'；'.join(local_context[:10]) or '无'}\n"
             f"搜索材料：\n{materials}"
         )
 
@@ -164,6 +193,7 @@ class SearchService:
             return WebSearchInsight()
 
     def _fallback_insight(self, responses: List[WebSearchResponse], local_context: list[str]) -> WebSearchInsight:
+        """LLM 不可用时的本地降级摘要：尽量口语化，不带技术术语前缀。"""
         snippets: list[str] = []
         contacts: list[SearchEmergencyContact] = []
         seen_phones: set[str] = set()
@@ -171,7 +201,7 @@ class SearchService:
             for result in response.results:
                 text = " ".join(part for part in [result.title, result.content] if part)
                 if text and len(snippets) < 3:
-                    snippets.append(text[:90])
+                    snippets.append(text[:80])
                 for phone in self._extract_phone_numbers(text):
                     if phone in seen_phones:
                         continue
@@ -181,28 +211,53 @@ class SearchService:
                         phone=phone,
                         contact_type="救援",
                     ))
-        summary_parts = []
+        parts: list[str] = []
         if local_context:
-            summary_parts.append("高德周边线索：" + "、".join(local_context[:6]))
+            parts.append("、".join(local_context[:4]))
         if snippets:
-            summary_parts.append("网络资料摘要：" + "；".join(snippets))
-        summary = "；".join(summary_parts)
-        return WebSearchInsight(summary=summary, emergency_contacts=contacts[:6])
+            parts.append("；".join(snippets))
+        return WebSearchInsight(summary="；".join(parts), emergency_contacts=contacts[:6])
 
     def _format_search_materials(self, responses: List[WebSearchResponse]) -> str:
+        """精简格式化搜索材料给 LLM：每条优先取摘要、控制条数与字数以压缩 token。"""
         lines: list[str] = []
         index = 1
         for response in responses:
-            for result in response.results[:5]:
-                text = result.raw_content or result.content
-                text = " ".join(text.split())[:900]
+            for result in response.results[:4]:
+                text = result.content or result.raw_content or ""
+                text = " ".join(text.split())[:400]
                 if not text:
                     continue
-                lines.append(f"{index}. 标题：{result.title}\n来源：{result.source}\nURL：{result.url}\n内容：{text}")
+                lines.append(f"{index}. {result.title}（{result.source}）：{text}")
                 index += 1
-                if index > 12:
-                    return "\n\n".join(lines)
-        return "\n\n".join(lines)
+                if index > 8:
+                    return "\n".join(lines)
+        return "\n".join(lines)
+
+    @staticmethod
+    def _format_references(references: List[WebReference]) -> str:
+        """把前端回传的网络参考资料格式化为 LLM 材料字符串。"""
+        lines: list[str] = []
+        for i, ref in enumerate(references[:8], 1):
+            text = " ".join((ref.snippet or "").split())[:400]
+            if not text:
+                continue
+            lines.append(f"{i}. {ref.title}（{ref.source}）：{text}")
+        return "\n".join(lines)
+
+    @staticmethod
+    def _clean_term(text: str) -> str:
+        """清洗高德线索里的生硬技术标签，转成可读中文（local_context 进入 LLM/降级前调用）。"""
+        if not text:
+            return ""
+        for old, new in (
+            ("附近POI：", "附近有 "),
+            ("周边POI：", "周边有 "),
+            ("POI", "地点"),
+            ("逆地理", "属地"),
+        ):
+            text = text.replace(old, new)
+        return text.strip("：、， ")
 
     @staticmethod
     def _extract_phone_numbers(text: str) -> list[str]:
