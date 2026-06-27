@@ -171,7 +171,7 @@ class SearchService:
                     "max_tokens": min(config.LLM_MAX_TOKENS, 1200),
                     "response_format": {"type": "json_object"},
                 },
-                timeout=min(config.LLM_TIMEOUT, 90),
+                timeout=min(config.LLM_TIMEOUT, 360),
                 proxies=config.PROXY if config.should_use_proxy() else {"http": None, "https": None},
             )
             response.raise_for_status()

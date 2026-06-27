@@ -164,31 +164,23 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
     });
   };
 
-  // 绘制关键点 - 小圆点
-  const renderKeyPointMarkers = () => {
+  // 绘制关键点：用 HTML 固定像素小红点，避免 SVG 横向自适应时 circle 被拉成椭圆。
+  const renderKeyPointDots = () => {
     return props.points.filter(p => p.isKeyPoint).map((point, index) => {
       const x = getX(point.distanceM);
       const y = getY(point.elevationM);
 
       return (
-        <g key={index}>
-          <circle
-            cx={x}
-            cy={y}
-            r="3.2"
-            fill="rgba(255,255,255,0.92)"
-            stroke="rgba(24,24,27,0.18)"
-            strokeWidth="0.5"
-          />
-          <circle
-            cx={x}
-            cy={y}
-            r="1.25"
-            fill="#27272a"
-            stroke="#ffffff"
-            strokeWidth="0.35"
-          />
-        </g>
+        <span
+          key={`${point.distanceM}-${index}`}
+          className="pointer-events-auto absolute h-2 w-2 rounded-full border border-white bg-red-500 shadow-[0_0_0_1px_rgba(185,28,28,0.25)]"
+          style={{
+            left: `${x}%`,
+            top: `${(y / chartHeight) * 100}%`,
+            transform: 'translate(-50%, -50%)',
+          }}
+          title={`${point.label || '关键点'} ${point.elevationM.toFixed(0)}m`}
+        />
       );
     });
   };
@@ -248,26 +240,11 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
             strokeWidth="1.15"
             vectorEffect="non-scaling-stroke"
           />
-
-          {/* 关键点 */}
-          {renderKeyPointMarkers()}
         </svg>
 
-        {/* 关键点标签 - 显示名称和海拔 */}
+        {/* 关键点固定像素标记 */}
         <div className="absolute inset-0 pointer-events-none">
-          {props.points.filter(p => p.isKeyPoint).map((point, index) => (
-            <div
-              key={index}
-              className="absolute rounded border border-zinc-200 bg-white/90 px-1 py-0.5 text-[7px] font-semibold text-zinc-700 shadow-sm whitespace-nowrap"
-              style={{
-                left: `${getX(point.distanceM)}%`,
-                top: `${(getY(point.elevationM) / chartHeight) * 100}%`,
-                transform: `translate(-50%, ${index % 2 === 0 ? '-150%' : '35%'})`
-              }}
-            >
-              {point.label || '关键点'} {point.elevationM.toFixed(0)}m
-            </div>
-          ))}
+          {renderKeyPointDots()}
         </div>
 
         {/* 地形分析标注 - 改到曲线旁边 */}
@@ -316,7 +293,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
       {/* 图例 */}
       <div className="flex items-center justify-center gap-4 mt-1.5 text-[9px] text-zinc-500">
         <div className="flex items-center gap-1">
-          <div className="h-2 w-2 rounded-full border border-zinc-300 bg-zinc-800" />
+          <div className="h-2 w-2 rounded-full border border-white bg-red-500 shadow-[0_0_0_1px_rgba(185,28,28,0.25)]" />
           <span>关键点</span>
         </div>
         <div className="flex items-center gap-1">
