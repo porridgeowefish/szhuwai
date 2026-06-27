@@ -33,33 +33,41 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
   const [mapError, setMapError] = useState<string | null>(null);
 
   // 使用 ref 管理地图实例和覆盖物
+  // containerRef：地图宿主节点。关键——该节点必须常驻 DOM，不能随 tab 切换被卸载，
+  // 否则高德地图的异步回调会在节点被 React 移除后继续操作，抛出 removeChild 错误。
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<AMap.Map | null>(null);
   const polylineRef = useRef<AMap.Polyline | null>(null);
   const markersRef = useRef<AMap.Marker[]>([]);
 
-  // 1. 地图初始化 - 只在 tab 切换到 map 时执行一次
+  // 1. 地图懒初始化：首次切到 map 时创建一次；切走只隐藏（由 hidden class 控制），
+  //    绝不在 tab 切换时 destroy——destroy 与 React 卸载争抢 DOM 是 removeChild 报错的根因。
   useEffect(() => {
     if (activeTab !== 'map') return;
 
-    // 检查高德地图 SDK 是否加载
+    // 已初始化过：切回时刷新尺寸（hidden 期间容器尺寸为 0，canvas 需重算）
+    if (mapRef.current) {
+      try {
+        mapRef.current.resize();
+      } catch {
+        /* 高德 resize 偶发抛错，忽略，不阻塞展示 */
+      }
+      return;
+    }
+
     if (!window.AMap) {
       setMapError('高德地图 SDK 未加载，请在 index.html 中配置有效的 API Key');
       return;
     }
-
-    // 避免重复初始化
-    if (mapRef.current) {
-      return;
-    }
+    if (!containerRef.current) return;
 
     try {
-      // 计算地图中心点：使用第一个轨迹点或默认位置
       const defaultCenter: [number, number] = [103.8, 30.0];
       const center = (trackPointsGCJ02 && trackPointsGCJ02.length > 0)
         ? [trackPointsGCJ02[0].lng, trackPointsGCJ02[0].lat] as [number, number]
         : defaultCenter;
 
-      const map = new window.AMap.Map('track-map-container', {
+      const map = new window.AMap.Map(containerRef.current, {
         zoom: 12,
         center,
         mapStyle: 'amap://styles/whitesmoke',
@@ -71,16 +79,21 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
     } catch (err) {
       setMapError(err instanceof Error ? err.message : '地图初始化失败');
     }
+  }, [activeTab, trackPointsGCJ02]);
 
-    // 清理函数 - 组件卸载时销毁地图
+  // 2. 仅组件真正卸载时销毁地图，释放高德资源（不再随 tab 切换销毁）。
+  useEffect(() => {
     return () => {
       if (mapRef.current) {
-        mapRef.current.destroy();
+        try {
+          mapRef.current.destroy();
+        } catch {
+          /* 组件卸载阶段忽略 destroy 异常 */
+        }
         mapRef.current = null;
-        setMapLoaded(false);
       }
     };
-  }, [activeTab]);
+  }, []);
 
   // 2. 轨迹绘制 - 在地图初始化完成后执行
   useEffect(() => {
@@ -174,8 +187,8 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
 
       {/* 内容区 */}
       <div className="p-6">
-        {activeTab === 'elevation' ? (
-          <div className="space-y-6">
+        {/* 海拔剖面 - 常驻 DOM，用 hidden 切换可见性 */}
+        <div className={cn('space-y-6', activeTab === 'elevation' ? '' : 'hidden')}>
             {/* 海拔图 */}
             <div className="rounded-xl overflow-hidden">
               <ElevationChart
@@ -314,10 +327,12 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
               </div>
             )}
           </div>
-        ) : (
-          <div className="space-y-4">
+
+        {/* 平面轨迹 - 常驻 DOM，容器永不卸载，避免高德与 React 争抢 DOM */}
+        <div className={cn('space-y-4', activeTab === 'map' ? '' : 'hidden')}>
             {/* 平面图容器 */}
             <div
+              ref={containerRef}
               id="track-map-container"
               className="w-full h-[400px] rounded-xl bg-[var(--sand)] relative overflow-hidden"
             >
@@ -348,8 +363,7 @@ export const TrackDetailSection: React.FC<TrackDetailSectionProps> = ({
                 <span>关键点</span>
               </div>
             </div>
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

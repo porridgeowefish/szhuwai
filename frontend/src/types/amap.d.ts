@@ -8,6 +8,7 @@ declare namespace AMap {
     setFitView(overlays?: Overlay[], immediately?: boolean, avoid?: [number, number, number, number]): void;
     add(overlay: Overlay): void;
     remove(overlay: Overlay): void;
+    resize(): void;
     destroy(): void;
   }
 
