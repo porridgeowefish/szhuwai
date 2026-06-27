@@ -16,9 +16,9 @@ from src.api.map_client import MapClient
 class TransportService:
     """交通规划服务"""
 
-    def __init__(self):
+    def __init__(self, config=None):
         """初始化服务"""
-        self.client = MapClient()
+        self.client = MapClient(config)
 
     def plan(
         self,
@@ -67,8 +67,47 @@ class TransportService:
             )
 
         except Exception as e:
-            logger.error(f"获取交通路线失败: {e}")
-            raise
+            logger.warning(f"获取交通路线失败，已返回降级交通方案: {e}")
+            return self._build_unavailable_transport_routes(
+                departure_point=departure_point,
+                destination_coord=destination_coord,
+                reason=str(e),
+            )
+
+    def _build_unavailable_transport_routes(
+        self,
+        departure_point: str,
+        destination_coord: str,
+        reason: str,
+    ) -> TransportRoutes:
+        """外部地图接口失败时返回结构完整的交通降级结果。"""
+        dest_lon: float | None = None
+        dest_lat: float | None = None
+        try:
+            lon_text, lat_text = destination_coord.split(",", 1)
+            dest_lon = float(lon_text)
+            dest_lat = float(lat_text)
+        except (ValueError, AttributeError):
+            logger.debug(f"无法解析目的地坐标: {destination_coord}")
+
+        return TransportRoutes(
+            origin=LocationInfo(address=departure_point),
+            destination=LocationInfo(address="轨迹起点", lon=dest_lon, lat=dest_lat),
+            outbound={},
+            return_route={},
+            summary=RouteSummary(
+                total_distance=None,
+                total_time=None,
+                cost=reason[:120],
+                fastest_mode=None,
+                cheapest_mode=None,
+            ),
+            recommended_mode="交通接口不可用，需人工确认集合点、停车和返程",
+            fastest_mode=None,
+            cheapest_mode=None,
+            taxi_cost_yuan=None,
+            transit_routes=None,
+        )
 
     def _build_transport_routes(
         self,
@@ -83,9 +122,9 @@ class TransportService:
         dep_lon, dep_lat = departure_coord.split(',')
         dest_lon, dest_lat = destination_coord.split(',')
 
-        outbound = {"driving": driving_route.model_dump()}
+        outbound = {"driving": driving_route.model_dump(by_alias=True)}
         if transit_routes:
-            outbound["transit"] = transit_routes[0].model_dump()
+            outbound["transit"] = transit_routes[0].model_dump(by_alias=True)
 
         # 确定最快和最便宜的交通方式
         mode_times = {"驾车": driving_route.duration_min}
@@ -192,5 +231,40 @@ class TransportService:
             return results if results else []
 
         except Exception as e:
-            logger.error(f"周边救援搜索失败: {e}")
+            logger.warning(f"周边救援搜索失败，已返回空列表: {e}")
             return []
+
+    def collect_scenic_context(self, lon: float, lat: float, radius: int = 10000) -> List[str]:
+        """用高德逆地理和周边搜索收集景观/地名线索，供 AI 摘要使用。"""
+        context: list[str] = []
+        location = f"{lon},{lat}"
+        try:
+            reverse = self.client.reverse_geocode(location)
+            if reverse.address:
+                context.append(f"所在区域：{reverse.address}")
+            for poi in reverse.pois[:5]:
+                if poi.name:
+                    context.append(f"附近POI：{poi.name}（{poi.type or '未知类型'}，约{poi.distance or 0:.0f}米）")
+            for road in reverse.roads[:3]:
+                if road.name:
+                    context.append(f"附近道路：{road.name}")
+        except Exception as e:
+            logger.warning(f"逆地理景观线索获取失败: {e}")
+
+        try:
+            scenic_pois = self.client.search_around(
+                location=location,
+                keywords="景区|公园|山|湖|寺|观景台|风景|自然保护区|森林公园",
+                radius=radius,
+                page_size=20,
+            )
+            for poi in scenic_pois[:10]:
+                name = str(poi.get("name", "")).strip()
+                poi_type = str(poi.get("type", "")).strip()
+                distance = poi.get("distance")
+                if name:
+                    context.append(f"周边景观：{name}（{poi_type or '未知类型'}，约{distance or 0}米）")
+        except Exception as e:
+            logger.warning(f"周边景观搜索失败: {e}")
+
+        return list(dict.fromkeys(context))

@@ -1,128 +1,71 @@
 /**
- * PDF 导出工具函数
- * 使用 jsPDF + html2canvas 生成 PDF
+ * 报告导出工具（防卡死版）
+ * ----------------------
+ * - PDF：走浏览器原生 `window.print()`。纯原生打印管线，不克隆 DOM、不画大 Canvas、
+ *   不阻塞主线程，自动分页。用户在打印对话框里选「另存为 PDF」即可。
+ *   彻底告别 html2canvas + jsPDF 在长页面（地图/图表/大表格）上卡死/崩溃的问题。
+ * - 长图：用 modern-screenshot（比 html2canvas 快数十倍、内存占用更低），导出时由
+ *   调用方禁用按钮并显示 loading。
  */
 
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
-
-/**
- * 将 oklch 颜色转换为 rgb 格式
- * html2canvas 不支持 oklch 颜色，需要转换
- */
-function convertOklchToRgb(oklch: string): string {
-  const temp = document.createElement('div');
-  temp.style.color = oklch;
-  temp.style.display = 'none';
-  document.body.appendChild(temp);
-  const rgb = getComputedStyle(temp).color;
-  document.body.removeChild(temp);
-  return rgb;
-}
-
-/**
- * 检查颜色值是否为 oklch 格式
- */
-function isOklchColor(color: string): boolean {
-  return color.includes('oklch');
-}
-
-/**
- * 递归处理元素样式，将 oklch 颜色转换为 rgb
- * 遍历所有 CSS 属性，确保不遗漏任何 oklch 颜色
- */
-function processElementStyles(element: Element): void {
-  const computed = window.getComputedStyle(element);
-  const htmlEl = element as HTMLElement;
-
-  // 遍历所有 CSS 属性，转换其中的 oklch 颜色
-  for (let i = 0; i < computed.length; i++) {
-    const prop = computed[i];
-    const value = computed.getPropertyValue(prop);
-    if (value && value.includes('oklch')) {
-      // 使用正则替换所有 oklch 值
-      const newValue = value.replace(/oklch\([^)]+\)/g, (match) => {
-        return convertOklchToRgb(match);
-      });
-      htmlEl.style.setProperty(prop, newValue, 'important');
-    }
+const PRINT_STYLE_ID = 'report-print-style';
+// 只显示报告主内容区，隐藏导航/按钮等；其余交给浏览器原生分页。
+const PRINT_CSS = `
+@media print {
+  body * { visibility: hidden !important; }
+  .pdf-export-container, .pdf-export-container * { visibility: visible !important; }
+  .pdf-export-container {
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
+  .no-print { display: none !important; }
+}
+`;
 
-  // 递归处理子元素
-  Array.from(element.children).forEach(processElementStyles);
+function sanitizeFilename(filename: string): string {
+  const cleaned = filename.replace(/[\\/:*?"<>|]/g, '_').trim();
+  return cleaned || '户外策划书';
+}
+
+function ensurePrintStyle(): void {
+  if (document.getElementById(PRINT_STYLE_ID)) return;
+  const style = document.createElement('style');
+  style.id = PRINT_STYLE_ID;
+  style.textContent = PRINT_CSS;
+  document.head.appendChild(style);
 }
 
 /**
- * 将 DOM 元素导出为 PDF
- *
- * @param element - 要导出的 DOM 元素
- * @param filename - PDF 文件名（不含扩展名）
+ * 导出 PDF：触发浏览器原生打印。在弹出的打印对话框中选择「另存为 PDF」。
+ * 不传元素——打印范围由 PRINT_CSS 里的 .pdf-export-container 决定。
  */
-export async function exportToPDF(element: HTMLElement, filename: string): Promise<void> {
-  try {
-    console.log('开始PDF导出...', element);
+export async function exportToPDF(): Promise<void> {
+  ensurePrintStyle();
+  // 等一帧让 <style> 生效后再触发打印
+  await new Promise((resolve) => requestAnimationFrame(() => setTimeout(resolve, 0)));
+  window.print();
+}
 
-    // 使用 html2canvas 将 DOM 元素转换为 canvas
-    const canvas = await html2canvas(element, {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      allowTaint: true,
-      scrollX: 0,
-      scrollY: -window.scrollY,
-      onclone: (clonedDoc, clonedElement) => {
-        // 递归处理所有元素，将 oklch 颜色转换为 rgb
-        processElementStyles(clonedElement);
+/**
+ * 导出长图 PNG：modern-screenshot 渲染整段内容。速度远快于 html2canvas。
+ * 注意：超长页面仍受浏览器 Canvas 尺寸/内存上限约束；地图瓦片跨域可能不显示。
+ */
+export async function exportToLongImage(element: HTMLElement, filename: string): Promise<void> {
+  const { domToPng } = await import('modern-screenshot');
+  const dataUrl = await domToPng(element, {
+    scale: Math.min(window.devicePixelRatio || 2, 2),
+    backgroundColor: '#ffffff',
+    fetch: { requestInit: { mode: 'cors' } },
+  });
 
-        // 确保 PDF 导出容器样式正确
-        const pdfContainer = clonedElement.querySelector('.pdf-export-container') as HTMLElement;
-        if (pdfContainer) {
-          pdfContainer.style.background = 'white';
-        }
-      },
-    });
-
-    console.log('Canvas生成完成', canvas.width, canvas.height);
-
-    // 获取 canvas 尺寸
-    const imgWidth = canvas.width;
-    const imgHeight = canvas.height;
-
-    // 创建 PDF (A4 尺寸)
-    const pdf = new jsPDF({
-      orientation: imgWidth > imgHeight ? 'landscape' : 'portrait',
-      unit: 'px',
-      format: 'a4',
-    });
-
-    // A4 纸张尺寸 (像素)
-    const pdfWidth = pdf.internal.pageSize.getWidth();
-    const pdfHeight = pdf.internal.pageSize.getHeight();
-
-    console.log('PDF尺寸', pdfWidth, pdfHeight);
-
-    // 计算缩放比例以适应页面
-    const ratio = Math.min(pdfWidth / imgWidth, pdfHeight / imgHeight);
-    const scaledWidth = imgWidth * ratio;
-    const scaledHeight = imgHeight * ratio;
-
-    console.log('缩放比例', ratio, scaledWidth, scaledHeight);
-
-    // 居中放置
-    const x = (pdfWidth - scaledWidth) / 2;
-    const y = (pdfHeight - scaledHeight) / 2;
-
-    // 将 canvas 转换为图片并添加到 PDF
-    const imgData = canvas.toDataURL('image/png');
-    pdf.addImage(imgData, 'PNG', x, y, scaledWidth, scaledHeight);
-
-    // 下载 PDF
-    pdf.save(`${filename}.pdf`);
-    console.log('PDF导出成功');
-  } catch (error) {
-    console.error('PDF 导出失败:', error);
-    alert(`PDF导出失败: ${error instanceof Error ? error.message : '未知错误'}`);
-    throw error;
-  }
+  const link = document.createElement('a');
+  link.href = dataUrl;
+  link.download = `${sanitizeFilename(filename)}.png`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }

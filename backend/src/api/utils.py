@@ -278,7 +278,17 @@ class BaseAPIClient(ABC):
 
             # 验证响应
             if not self.validate_response(result):
-                raise APIError("Invalid API response format", response.status_code, result)
+                error_msg = self.parse_error(result)
+                logger.warning(
+                    "API response validation failed: %s %s status=%s info=%s infocode=%s keys=%s",
+                    method,
+                    endpoint,
+                    result.get("status"),
+                    result.get("info"),
+                    result.get("infocode") or result.get("info_code"),
+                    list(result.keys()),
+                )
+                raise APIError(error_msg, response.status_code, result)
 
             # 缓存GET请求
             if method.upper() == 'GET':

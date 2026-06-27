@@ -12,7 +12,7 @@ from typing import List, Optional, Literal, Dict
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 
 from .base import Point3D
-from .track import TrackAnalysisResult
+from .track import TrackAnalysisResult, TrackPointGCJ02
 from .weather import WeatherSummary, CityWeatherDaily, HourlyWeather
 from .transport import TransportRoutes
 from .search import WebSearchResponse
@@ -157,10 +157,15 @@ class GridPointWeather(BaseModel):
     """
     model_config = ConfigDict(populate_by_name=True)
 
-    point_type: Literal["起点", "终点", "最高点", "中点"] = Field(..., alias="pointType")
+    point_type: Literal["地区基准", "起点", "终点", "最高点", "中点"] = Field(..., alias="pointType")
     temp: int = Field(..., description="温度 (°C)")
     wind_scale: str = Field(..., alias="windScale", description="风力等级")
     humidity: int = Field(..., description="相对湿度 (%)")
+    feels_like: Optional[float] = Field(None, alias="feelsLike", description="体感温度 (°C)")
+    wind_chill: Optional[float] = Field(None, alias="windChill", description="风寒温度 (°C)")
+    uv_level: Optional[str] = Field(None, alias="uvLevel", description="紫外线强度等级")
+    estimated: bool = Field(False, description="是否为估算值")
+    note: Optional[str] = Field(None, description="数据说明")
 
     @field_validator('wind_scale', mode='before')
     @classmethod
@@ -221,6 +226,7 @@ class TrackDetailAnalysis(BaseModel):
     safety_risk: str = Field(..., alias="safetyRisk", description="安全风险等级")
     terrain_analysis: List[TerrainSegment] = Field(default_factory=list, alias="terrainAnalysis", description="地形分析")
     elevation_points: List[ElevationPoint] = Field(default_factory=list, alias="elevationPoints", description="海拔轨迹点（用于前端可视化）")
+    track_points_gcj02: List[TrackPointGCJ02] = Field(default_factory=list, alias="trackPointsGcj02", description="GCJ02 抽样轨迹点（用于前端地图）")
     cloud_sea_assessment: Optional[CloudSeaAssessment] = Field(None, alias="cloudSeaAssessment", description="云海评估")
 
 
@@ -234,6 +240,18 @@ class ScenicSpot(BaseModel):
     spot_type: Literal["自然风光", "人文景观"] = Field(..., alias="spotType", description="景点类型")
     description: str = Field(..., description="景点描述（自然风光需科学科普，人文景观需讲述背后故事）")
     location: Point3D = Field(..., description="景点位置坐标")
+
+
+class WebReference(BaseModel):
+    """网络参考资料（来自网页搜索的攻略/救援/资讯）
+    API 响应使用 camelCase 字段名（通过 alias 转换）。
+    """
+    model_config = ConfigDict(populate_by_name=True)
+
+    title: str = Field(..., description="标题")
+    url: str = Field(..., description="链接")
+    snippet: str = Field(default="", description="摘要")
+    source: str = Field(default="", description="来源站点")
 
 
 class OutdoorActivityPlan(BaseModel):
@@ -262,11 +280,12 @@ class OutdoorActivityPlan(BaseModel):
     critical_grid_weather: List[GridPointWeather] = Field(default_factory=list, alias="criticalGridWeather", description="起点、终点、最高点的格点天气简报")
 
     # 4. 核心规划内容
-    itinerary: List[ItineraryItem] = Field(default_factory=list, description="行程安排")
     equipment_recommendations: List[EquipmentItem] = Field(default_factory=list, alias="equipmentRecommendations", description="装备建议")
     scenic_spots: List[ScenicSpot] = Field(default_factory=list, alias="scenicSpots", description="风景点推荐")
     precautions: List[str] = Field(default_factory=list, description="注意事项")
     hiking_advice: str = Field(default="", alias="hikingAdvice", description="徒步建议（AI生成的综合建议，以叙事方式呈现）")
+    web_references: List[WebReference] = Field(default_factory=list, alias="webReferences", description="网络参考资料（攻略/救援/资讯）")
+    web_summary: str = Field(default="", alias="webSummary", description="AI 基于网络搜索提炼的沿途风光、攻略和应急信息摘要")
 
     # 5. 安全与应急
     safety_assessment: SafetyAssessment = Field(

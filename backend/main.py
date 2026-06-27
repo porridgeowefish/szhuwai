@@ -9,32 +9,19 @@ FastAPI Server
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 # 导入模块化路由
 from src.api.routes import (
-    track_router,
-    weather_router,
-    transport_router,
-    search_router,
+    location_router,
     plan_router,
-    auth_router,
-    sms_router,
-    quota_router,
-    reports_router,
-    users_router,
+    two_bulu_router,
 )
-from src.api.routes.chat import router as chat_router
-
-# 导入配置和基础设施
-from src.api.config import api_config
-from src.infrastructure.mysql_client import init_mysql_client
-from src.infrastructure.jwt_handler import init_jwt_handler
-from src.infrastructure.aliyun_sms_client import init_aliyun_sms_client
-from src.infrastructure.mongo_client import init_mongo_client
-from src.infrastructure.redis_client import init_redis_client
+from src.services.two_bulu_browser_service import session_manager
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -43,11 +30,21 @@ logger = logging.getLogger(__name__)
 # ============ 常量配置 ============
 API_VERSION = "v1"  # API 版本
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    """管理本服务创建的浏览器生命周期。"""
+
+    yield
+    session_manager.shutdown()
+
+
 # 创建 FastAPI 应用
 app = FastAPI(
     title="户外活动智能规划系统 API",
     description="为 React 前端提供户外活动规划服务",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan,
 )
 
 # 配置 CORS
@@ -65,70 +62,14 @@ app.add_middleware(
 )
 
 
-# ============ 应用启动事件 ============
-@app.on_event("startup")
-async def startup_event():
-    """应用启动时初始化基础设施"""
-    logger.info("初始化基础设施...")
-
-    # 初始化 MySQL 客户端
-    try:
-        init_mysql_client(api_config)
-        logger.info("MySQL 客户端初始化成功")
-    except Exception as e:
-        logger.warning(f"MySQL 客户端初始化失败: {e}")
-
-    # 初始化 JWT 处理器
-    try:
-        init_jwt_handler(api_config)
-        logger.info("JWT 处理器初始化成功")
-    except Exception as e:
-        logger.warning(f"JWT 处理器初始化失败: {e}")
-
-    # 安全警告：检测默认 JWT 密钥
-    if api_config.JWT_SECRET_KEY == "change-me-in-production":
-        logger.warning(
-            "安全警告: JWT_SECRET_KEY 使用默认值 'change-me-in-production'，"
-            "请在生产环境中通过环境变量设置强密钥！"
-        )
-
-    # 初始化短信客户端
-    try:
-        init_aliyun_sms_client(api_config)
-        logger.info("短信客户端初始化成功")
-    except Exception as e:
-        logger.warning(f"短信客户端初始化失败: {e}")
-
-    # 初始化 MongoDB 客户端
-    try:
-        init_mongo_client(api_config)
-        logger.info("MongoDB 客户端初始化成功")
-    except Exception as e:
-        logger.warning(f"MongoDB 客户端初始化失败: {e}")
-
-    # 初始化 Redis 客户端
-    try:
-        init_redis_client(api_config)
-        logger.info("Redis 客户端初始化成功")
-    except Exception as e:
-        logger.warning(f"Redis 客户端初始化失败: {e}")
-
 # ============ 注册模块化路由 ============
-app.include_router(track_router, prefix=f"/api/{API_VERSION}")
-app.include_router(weather_router, prefix=f"/api/{API_VERSION}")
-app.include_router(transport_router, prefix=f"/api/{API_VERSION}")
-app.include_router(search_router, prefix=f"/api/{API_VERSION}")
 app.include_router(plan_router, prefix=f"/api/{API_VERSION}")
-app.include_router(sms_router, prefix=f"/api/{API_VERSION}")
-app.include_router(auth_router, prefix=f"/api/{API_VERSION}")
-app.include_router(quota_router, prefix=f"/api/{API_VERSION}")
-app.include_router(reports_router, prefix=f"/api/{API_VERSION}")
-app.include_router(users_router, prefix=f"/api/{API_VERSION}")
-app.include_router(chat_router, prefix=f"/api/{API_VERSION}")
+app.include_router(location_router, prefix=f"/api/{API_VERSION}")
+app.include_router(two_bulu_router, prefix=f"/api/{API_VERSION}")
 
 
 @app.get("/")
-async def root():
+async def root() -> dict[str, str]:
     """根路径欢迎信息"""
     return {
         "message": "欢迎使用户外活动智能规划系统 API",
@@ -138,7 +79,7 @@ async def root():
 
 
 @app.get("/health")
-async def health_check():
+async def health_check() -> dict[str, str]:
     """健康检查"""
     return {"status": "healthy"}
 

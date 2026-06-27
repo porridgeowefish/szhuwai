@@ -34,10 +34,15 @@ export interface CityWeatherDaily {
 }
 
 export interface GridPointWeather {
-  pointType: '起点' | '终点' | '最高点' | '中点';
+  pointType: '地区基准' | '起点' | '终点' | '最高点' | '中点';
   temp: number;
   windScale: string;
   humidity: number;
+  feelsLike?: number | null;
+  windChill?: number | null;
+  uvLevel?: string | null;
+  estimated?: boolean;
+  note?: string | null;
 }
 
 export interface Point3D {
@@ -63,12 +68,11 @@ export interface EquipmentItem {
   alternatives: string[];
 }
 
-export interface ItineraryItem {
-  time: string;
-  activity: string;
-  location?: string;
-  durationMinutes?: number;
-  notes?: string;
+export interface WebReference {
+  title: string;
+  url: string;
+  snippet?: string;
+  source?: string;
 }
 
 export interface SafetyAssessment {
@@ -231,11 +235,12 @@ export interface PlanData {
   hourlyWeather: HourlyWeather[];
   criticalGridWeather: GridPointWeather[];
 
-  itinerary: ItineraryItem[];
   equipmentRecommendations: EquipmentItem[];
   scenicSpots: ScenicSpot[];
   precautions: string[];
   hikingAdvice?: string;
+  webReferences: WebReference[];
+  webSummary?: string;
 
   safetyAssessment: SafetyAssessment;
   safetyIssues: SafetyIssue[];

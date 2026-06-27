@@ -7,7 +7,7 @@ Schema definitions for web search results and queries.
 
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -25,13 +25,31 @@ class SearchResult(BaseModel):
     title: str = Field(..., description="标题")
     url: str = Field(..., description="URL")
     content: str = Field(..., description="内容摘要")
-    score: float = Field(..., ge=0, le=1, description="相关度评分")
+    score: float = Field(default=0.0, description="相关度评分（归一化到 [0,1]，缺失/异常记 0.0）")
     source: str = Field(..., description="来源网站")
     source_type: SourceType = Field(default=SourceType.WEB, description="来源类型")
     published_date: Optional[datetime] = Field(None, description="发布日期")
     relevance_tags: List[str] = Field(default_factory=list, description="相关标签")
     raw_content: Optional[str] = Field(None, description="原始内容（高级搜索时返回）")
     favicon: Optional[str] = Field(None, description="网站图标URL")
+
+    @field_validator('score', mode='before')
+    @classmethod
+    def normalize_score(cls, v: Any) -> float:
+        """相关度评分归一化：非数/缺失→0.0，越界→夹到 [0,1]。
+
+        不同搜索服务商返回的评分口径不一（Jina/SerpAPI 不返回分数，
+        Tavily 返回 [0,1]），统一归一化避免 Pydantic 校验崩溃。
+        """
+        try:
+            f = float(v)  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            return 0.0
+        if f < 0.0:
+            return 0.0
+        if f > 1.0:
+            return 1.0
+        return f
 
     @field_validator('url')
     @classmethod
@@ -116,54 +134,14 @@ class WebSearchResponse(BaseModel):
                   for r in self.results)
 
 
-def optimize_search_query(original_query: str, context: Dict[str, Any]) -> str:
-    """优化搜索查询"""
-    # 1. 提取关键信息
-    locations = context.get('locations', [])
-    dates = context.get('dates', [])
-    activities = context.get('activities', [])
-
-    # 2. 构建增强查询
-    enhanced = original_query
-
-    # 添加地理位置
-    if locations:
-        enhanced += f" {' '.join(locations)}"
-
-    # 添加时间信息
-    if dates:
-        enhanced += f" {' '.join(dates)}"
-
-    # 添加活动类型
-    if activities:
-        enhanced += " 徒步 登山 户外"
-
-    # 3. 使用布尔运算符
-    enhanced = enhanced.replace('和', ' OR ')
-
-    return enhanced
+class SearchEmergencyContact(BaseModel):
+    """从搜索结果中提取的应急电话候选。"""
+    name: str = Field(..., description="机构或电话名称")
+    phone: str = Field(..., description="电话号码")
+    contact_type: str = Field(default="救援", description="电话类型")
 
 
-def extract_keywords(text: str, max_keywords: int = 10) -> List[str]:
-    """从文本中提取关键词"""
-    # 简单的关键词提取
-    import re
-    # 移除停用词
-    stop_words = {
-        '的', '了', '在', '是', '我', '有', '和', '就', '不', '人', '都', '一', '个', '上', '也', '很', '到', '说', '要', '去', '你', '会', '着', '没有', '看', '好', '自己', '这'
-    }
-
-    # 提取中文词语
-    words = re.findall(r'[\u4e00-\u9fff]+', text)
-
-    # 过滤停用词并统计词频
-    word_count: Dict[str, int] = {}
-    for word in words:
-        if len(word) >= 2 and word not in stop_words:
-            word_count[word] = word_count.get(word, 0) + 1
-
-    # 按词频排序
-    sorted_words = sorted(word_count.items(), key=lambda x: x[1], reverse=True)
-
-    # 返回前N个关键词
-    return [word for word, count in sorted_words[:max_keywords]]
+class WebSearchInsight(BaseModel):
+    """搜索结果经 AI 或本地规则提炼后的可展示结论。"""
+    summary: str = Field(default="", description="沿途风光、攻略和应急信息摘要")
+    emergency_contacts: List[SearchEmergencyContact] = Field(default_factory=list)

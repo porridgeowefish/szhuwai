@@ -14,13 +14,13 @@ interface ElevationChartProps {
 /**
  * 海拔可视化图表
  * - 使用SVG绘制平滑海拔曲线
- * - 绿色代表低海拔，红色代表高海拔
- * - 用小红旗表示关键点位
- * - 大爬升/大下降路段用颜色高亮显示
+ * - 使用低饱和山地色带表达海拔变化
+ * - 用小节点表示关键点位
+ * - 大爬升/大下降路段用细区间带提示，避免整段刺眼标红
  */
 export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
   const chartHeight = props.height || 140;
-  const padding = { top: 20, bottom: 25, left: 5, right: 5 };
+  const padding = { top: 24, bottom: 26, left: 6, right: 4 };
   const innerWidth = 100 - padding.left - padding.right;
   const innerHeight = chartHeight - padding.top - padding.bottom;
 
@@ -29,7 +29,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
 
   // 获取总距离（单位：米）
   const totalDistance = props.points.length > 0
-    ? props.points[props.points.length - 1].distance_m
+    ? props.points[props.points.length - 1].distanceM
     : 1000;
 
   // 坐标转换函数（返回百分比坐标）
@@ -47,12 +47,12 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
     if (props.points.length === 0) return '';
 
     // 移动到第一个点
-    let path = `M ${getX(props.points[0].distance_m)} ${getY(props.points[0].elevation_m)}`;
+    let path = `M ${getX(props.points[0].distanceM)} ${getY(props.points[0].elevationM)}`;
 
     // 使用直线连接各点
     for (let i = 1; i < props.points.length; i++) {
       const curr = props.points[i];
-      path += ` L ${getX(curr.distance_m)} ${getY(curr.elevation_m)}`;
+      path += ` L ${getX(curr.distanceM)} ${getY(curr.elevationM)}`;
     }
 
     return path;
@@ -67,7 +67,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
     const firstPoint = props.points[0];
     const bottomY = chartHeight - padding.bottom;
 
-    return `${linePath} L ${getX(lastPoint.distance_m)} ${bottomY} L ${getX(firstPoint.distance_m)} ${bottomY} Z`;
+    return `${linePath} L ${getX(lastPoint.distanceM)} ${bottomY} L ${getX(firstPoint.distanceM)} ${bottomY} Z`;
   };
 
   // 获取海拔对应的颜色
@@ -76,15 +76,15 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
 
     if (ratio < 0.5) {
       const t = ratio * 2;
-      const r = Math.round(34 + (234 - 34) * t);
-      const g = Math.round(197 + (179 - 197) * t);
-      const b = Math.round(94 + (8 - 94) * t);
+      const r = Math.round(21 + (132 - 21) * t);
+      const g = Math.round(128 + (148 - 128) * t);
+      const b = Math.round(61 + (72 - 61) * t);
       return `rgb(${r}, ${g}, ${b})`;
     } else {
       const t = (ratio - 0.5) * 2;
-      const r = Math.round(234 + (239 - 234) * t);
-      const g = Math.round(179 + (68 - 179) * t);
-      const b = Math.round(8 + (68 - 8) * t);
+      const r = Math.round(132 + (154 - 132) * t);
+      const g = Math.round(148 + (92 - 148) * t);
+      const b = Math.round(72 + (64 - 72) * t);
       return `rgb(${r}, ${g}, ${b})`;
     }
   };
@@ -96,7 +96,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
       <stop
         key={index}
         offset={`${offset}%`}
-        stopColor={getElevationColor(point.elevation_m)}
+        stopColor={getElevationColor(point.elevationM)}
       />
     );
   });
@@ -121,14 +121,14 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
 
     return props.terrainAnalysis.map((terrain, index) => {
       // 需要找到终点距离
-      const endDistance = terrain.start_distance_m + terrain.distance_m;
-      const x1 = getX(terrain.start_distance_m);
+      const endDistance = terrain.startDistanceM + terrain.distanceM;
+      const x1 = getX(terrain.startDistanceM);
       const x2 = getX(endDistance);
       const width = x2 - x1;
 
-      const isAscent = terrain.change_type === '大爬升';
-      const color = isAscent ? 'rgba(220, 38, 38, 0.15)' : 'rgba(37, 99, 235, 0.15)';
-      const borderColor = isAscent ? 'rgba(220, 38, 38, 0.4)' : 'rgba(37, 99, 235, 0.4)';
+      const isAscent = terrain.changeType === 'large_ascent';
+      const color = isAscent ? 'rgba(245, 158, 11, 0.12)' : 'rgba(14, 165, 233, 0.10)';
+      const borderColor = isAscent ? 'rgba(180, 83, 9, 0.45)' : 'rgba(2, 132, 199, 0.38)';
 
       return (
         <g key={index}>
@@ -138,6 +138,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
             width={Math.max(width, 1)}
             height={innerHeight}
             fill={color}
+            rx="0.8"
           />
           {/* 顶部标记线 */}
           <line
@@ -146,8 +147,8 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
             x2={x1}
             y2={padding.top + innerHeight}
             stroke={borderColor}
-            strokeWidth="0.5"
-            strokeDasharray="2,2"
+            strokeWidth="0.45"
+            strokeDasharray="1.6,2.4"
           />
           <line
             x1={x2}
@@ -155,30 +156,37 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
             x2={x2}
             y2={padding.top + innerHeight}
             stroke={borderColor}
-            strokeWidth="0.5"
-            strokeDasharray="2,2"
+            strokeWidth="0.45"
+            strokeDasharray="1.6,2.4"
           />
         </g>
       );
     });
   };
 
-  // 绘制关键点 - 红色圆点
+  // 绘制关键点 - 小圆点
   const renderKeyPointMarkers = () => {
-    return props.points.filter(p => p.is_key_point).map((point, index) => {
-      const x = getX(point.distance_m);
-      const y = getY(point.elevation_m);
+    return props.points.filter(p => p.isKeyPoint).map((point, index) => {
+      const x = getX(point.distanceM);
+      const y = getY(point.elevationM);
 
       return (
         <g key={index}>
-          {/* 红色实心圆点 */}
           <circle
             cx={x}
             cy={y}
-            r="2.5"
-            fill="#dc2626"
+            r="3.2"
+            fill="rgba(255,255,255,0.92)"
+            stroke="rgba(24,24,27,0.18)"
+            strokeWidth="0.5"
+          />
+          <circle
+            cx={x}
+            cy={y}
+            r="1.25"
+            fill="#27272a"
             stroke="#ffffff"
-            strokeWidth="0.8"
+            strokeWidth="0.35"
           />
         </g>
       );
@@ -188,7 +196,7 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
   return (
     <div className={props.className || ''}>
       <div
-        className="relative w-full overflow-hidden rounded-lg bg-gradient-to-b from-zinc-50 to-zinc-100"
+        className="relative w-full overflow-hidden rounded-lg border border-zinc-200/70 bg-gradient-to-b from-[#f8faf4] to-[#eef1e8]"
         style={{ height: `${chartHeight}px` }}
       >
         {/* SVG 图表 */}
@@ -204,7 +212,8 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
             </linearGradient>
             <linearGradient id="elevationFill" x1="0%" y1="0%" x2="0%" y2="100%">
               <stop offset="0%" stopColor="rgba(34, 197, 94, 0.3)" />
-              <stop offset="100%" stopColor="rgba(34, 197, 94, 0.05)" />
+              <stop offset="55%" stopColor="rgba(132, 148, 72, 0.13)" />
+              <stop offset="100%" stopColor="rgba(132, 148, 72, 0.02)" />
             </linearGradient>
           </defs>
 
@@ -219,8 +228,8 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
               x2={100 - padding.right}
               y1={padding.top + ratio * innerHeight}
               y2={padding.top + ratio * innerHeight}
-              stroke="rgba(0,0,0,0.05)"
-              strokeWidth="0.3"
+              stroke="rgba(63,63,70,0.08)"
+              strokeWidth="0.25"
               vectorEffect="non-scaling-stroke"
             />
           ))}
@@ -236,55 +245,55 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
             d={generatePath()}
             fill="none"
             stroke="url(#elevationGradient)"
-            strokeWidth="1.5"
+            strokeWidth="1.15"
             vectorEffect="non-scaling-stroke"
           />
 
-          {/* 关键点 - 红色圆点 */}
+          {/* 关键点 */}
           {renderKeyPointMarkers()}
         </svg>
 
         {/* 关键点标签 - 显示名称和海拔 */}
         <div className="absolute inset-0 pointer-events-none">
-          {props.points.filter(p => p.is_key_point).map((point, index) => (
+          {props.points.filter(p => p.isKeyPoint).map((point, index) => (
             <div
               key={index}
-              className="absolute text-[7px] font-bold text-zinc-700 bg-white/95 px-1 py-0.5 rounded shadow-sm whitespace-nowrap"
+              className="absolute rounded border border-zinc-200 bg-white/90 px-1.5 py-0.5 text-[8px] font-semibold text-zinc-700 shadow-sm whitespace-nowrap"
               style={{
-                left: `${getX(point.distance_m)}%`,
-                top: `${(getY(point.elevation_m) / chartHeight) * 100}%`,
-                transform: 'translate(-50%, -130%)'
+                left: `${getX(point.distanceM)}%`,
+                top: `${(getY(point.elevationM) / chartHeight) * 100}%`,
+                transform: `translate(-50%, ${index % 2 === 0 ? '-150%' : '35%'})`
               }}
             >
-              {point.label || '关键点'} {point.elevation_m.toFixed(0)}m
+              {point.label || '关键点'} {point.elevationM.toFixed(0)}m
             </div>
           ))}
         </div>
 
         {/* 地形分析标注 - 改到曲线旁边 */}
         {props.terrainAnalysis && props.terrainAnalysis.map((terrain, index) => {
-          const startX = getX(terrain.start_distance_m);
-          const endX = getX(terrain.start_distance_m + terrain.distance_m);
+          const startX = getX(terrain.startDistanceM);
+          const endX = getX(terrain.startDistanceM + terrain.distanceM);
           const centerX = (startX + endX) / 2;
-          const isAscent = terrain.change_type === '大爬升';
+          const isAscent = terrain.changeType === 'large_ascent';
 
           return (
             <div
               key={index}
-              className="absolute flex items-center gap-1 px-2 py-1 rounded text-[9px] font-bold whitespace-nowrap shadow-sm pointer-events-auto"
+              className="absolute flex items-center gap-1 rounded-full px-2 py-0.5 text-[9px] font-bold whitespace-nowrap shadow-sm pointer-events-auto"
               style={{
                 left: `${Math.min(Math.max(centerX, 10), 90)}%`,
-                top: '5px',
+                top: isAscent ? '5px' : '20px',
                 transform: 'translateX(-50%)',
-                backgroundColor: isAscent ? '#fef2f2' : '#eff6ff',
-                color: isAscent ? '#dc2626' : '#2563eb',
-                border: `1px solid ${isAscent ? '#fecaca' : '#bfdbfe'}`,
+                backgroundColor: isAscent ? 'rgba(255, 251, 235, 0.95)' : 'rgba(240, 249, 255, 0.95)',
+                color: isAscent ? '#92400e' : '#0369a1',
+                border: `1px solid ${isAscent ? '#fde68a' : '#bae6fd'}`,
               }}
-              title={`${terrain.change_type}: ${terrain.elevation_diff.toFixed(0)}m, 坡度${terrain.gradient_percent.toFixed(1)}%, 距离${terrain.distance_m.toFixed(0)}m`}
+              title={`${isAscent ? '大爬升' : '大下降'}: ${terrain.elevationDiff.toFixed(0)}m, 坡度${terrain.gradientPercent.toFixed(1)}%, 距离${terrain.distanceM.toFixed(0)}m`}
             >
               {isAscent ? <ArrowUp size={10} /> : <ArrowDown size={10} />}
-              <span>{terrain.elevation_diff.toFixed(0)}m</span>
-              <span className="text-[8px] opacity-70">({terrain.distance_m.toFixed(0)}m)</span>
+              <span>{terrain.elevationDiff.toFixed(0)}m</span>
+              <span className="text-[8px] opacity-70">({terrain.distanceM.toFixed(0)}m)</span>
             </div>
           );
         })}
@@ -307,16 +316,16 @@ export const ElevationChart: React.FC<ElevationChartProps> = (props) => {
       {/* 图例 */}
       <div className="flex items-center justify-center gap-4 mt-1.5 text-[9px] text-zinc-500">
         <div className="flex items-center gap-1">
-          <div className="w-2 h-2 rounded-full bg-red-600 border border-white" />
+          <div className="h-2 w-2 rounded-full border border-zinc-300 bg-zinc-800" />
           <span>关键点</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2 rounded-sm bg-red-100 border border-red-300" />
-          <span>大爬升</span>
+          <div className="h-2 w-3 rounded-sm border border-amber-200 bg-amber-100" />
+          <span>爬升区间</span>
         </div>
         <div className="flex items-center gap-1">
-          <div className="w-2.5 h-2 rounded-sm bg-blue-100 border border-blue-300" />
-          <span>大下降</span>
+          <div className="h-2 w-3 rounded-sm border border-sky-200 bg-sky-100" />
+          <span>下降区间</span>
         </div>
       </div>
     </div>

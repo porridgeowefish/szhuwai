@@ -131,6 +131,14 @@ class TrackParser:
         if track_name is None:
             track_name = file_path.stem
 
+        # 文件大小上限，防止超大文件或 XML 实体膨胀（billion laughs）耗尽内存
+        try:
+            file_size = file_path.stat().st_size
+        except OSError as e:
+            raise TrackParseError(f"无法读取轨迹文件: {e}") from e
+        if file_size > 50 * 1024 * 1024:
+            raise TrackParseError(f"轨迹文件过大（{file_size // 1024 // 1024}MB），上限 50MB")
+
         # 根据文件类型解析
         try:
             if file_ext == '.gpx':
@@ -209,7 +217,8 @@ class TrackParser:
         Returns:
             TrackAnalysisResult: 轨迹分析结果
         """
-        import xml.etree.ElementTree as ET
+        # 用 defusedxml 防御 XXE 与实体膨胀（billion laughs）；API 与 xml.etree 一致
+        from defusedxml import ElementTree as ET
 
         # 使用字节模式读取，避免编码问题
         with open(file_path, 'rb') as f:

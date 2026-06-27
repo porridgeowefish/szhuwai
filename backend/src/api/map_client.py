@@ -6,8 +6,9 @@ Client for integrating with 高德地图 (Gaode Maps) API.
 """
 
 import logging
+import re
 import time
-from typing import Dict, Optional, List
+from typing import Dict, List
 from functools import wraps
 
 from . import BaseAPIClient, handle_api_errors, APIError
@@ -17,7 +18,6 @@ from src.schemas.transport import (
     TransitSegment,
     DrivingRoute,
     WalkingRoute,
-    TransportRoutes,
     GeocodeResult,
     ReverseGeocodeResult,
     POIInfo,
@@ -55,6 +55,53 @@ class MapClient(BaseAPIClient):
         else:
             # 如果是其他类型，尝试转换为字符串
             return str(value) if value else default
+
+    @staticmethod
+    def _safe_int(value) -> int:
+        """安全整数解析：处理高德返回的字符串/数字/空值，失败返回 0。"""
+        try:
+            if value is None or value == "":
+                return 0
+            return int(float(value))
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _stop_name(stop_obj) -> str:
+        """提取公交/地铁站点名：兼容 dict 或已是字符串的情况。"""
+        if isinstance(stop_obj, dict):
+            return str(stop_obj.get("name") or "")
+        if stop_obj in (None, "", []):
+            return ""
+        return str(stop_obj)
+
+    # 地铁/轨道交通识别：优先权威 type 字段，线路名正则兜底
+    _RAIL_RE = re.compile(r"地铁|轻轨|有轨电车|磁悬浮|APM|机场线")
+
+    @classmethod
+    def _is_subway_line(cls, busline: dict, line_name: str) -> bool:
+        """判断某条 busline 是否为地铁/轨道交通。"""
+        line_type = str(busline.get("type") or "")
+        if line_type and ("地铁" in line_type or "轻轨" in line_type):
+            return True
+        return bool(cls._RAIL_RE.search(line_name or ""))
+
+    def _normalize_coordinate_pair(self, location: str) -> str:
+        """按高德 Web 服务要求规范化 lon,lat 坐标（小数点后最多 6 位）。
+
+        若传入的不是合法坐标（如地名文本），原样返回交由下游 API 处理，
+        避免在参数解析阶段抛 ValueError 导致整条链路崩溃。
+        """
+        try:
+            lon_text, lat_text = location.split(",", 1)
+            lon, lat = float(lon_text), float(lat_text)
+        except (ValueError, AttributeError):
+            return location
+        return f"{lon:.6f},{lat:.6f}"
+
+    def _normalize_coordinate_sequence(self, location: str) -> str:
+        """规范化单个或多个坐标对；多个起点用 | 分隔时保持原结构。"""
+        return "|".join(self._normalize_coordinate_pair(item) for item in location.split("|"))
 
     def _retry_request(self, func=None, max_retries=3, delay=1):
         """重试请求装饰器"""
@@ -104,6 +151,11 @@ class MapClient(BaseAPIClient):
 
     def parse_error(self, response: Dict) -> str:
         """解析错误信息"""
+        info = response.get("info") or response.get("message")
+        infocode = response.get("infocode") or response.get("info_code")
+        if info or infocode:
+            return f"高德地图 API 错误: {info or '未知原因'} (infocode={infocode or 'Unknown'})"
+
         error_codes = {
             "1": "请求成功",
             "0": "请求失败",
@@ -310,6 +362,22 @@ class MapClient(BaseAPIClient):
         )
 
     @handle_api_errors
+    def ip_location(self) -> Dict[str, str]:
+        """IP 定位：浏览器无法取得经纬度时的低精度兜底。"""
+        endpoint = "ip"
+        params = {
+            "key": self.config.MAP_API_KEY,
+        }
+        response = self._make_request("GET", endpoint, params=params)
+        return {
+            "province": self._safe_get_string(response, "province"),
+            "city": self._safe_get_string(response, "city"),
+            "adcode": self._safe_get_string(response, "adcode"),
+            "rectangle": self._safe_get_string(response, "rectangle"),
+            "info": self._safe_get_string(response, "info"),
+        }
+
+    @handle_api_errors
     def driving_route(self, origin: str, destination: str,
                      strategy: int = 2) -> DrivingRoute:
         """
@@ -329,8 +397,8 @@ class MapClient(BaseAPIClient):
         """
         endpoint = "direction/driving"
         params = {
-            "origin": origin,
-            "destination": destination,
+            "origin": self._normalize_coordinate_sequence(origin),
+            "destination": self._normalize_coordinate_pair(destination),
             "key": self.config.MAP_API_KEY,
             "strategy": str(strategy),
             "extensions": "all",  # 必须为 all 才返回 taxi_cost
@@ -369,8 +437,8 @@ class MapClient(BaseAPIClient):
         """步行路线规划（简化版，仅返回核心信息）"""
         endpoint = "direction/walking"
         params = {
-            "origin": origin,
-            "destination": destination,
+            "origin": self._normalize_coordinate_pair(origin),
+            "destination": self._normalize_coordinate_pair(destination),
             "key": self.config.MAP_API_KEY,
             "extensions": "base"
         }
@@ -392,7 +460,7 @@ class MapClient(BaseAPIClient):
 
         return WalkingRoute(
             available=True,
-            duration_min=int(path.get("duration", 0) / 60),
+            duration_min=int(int(path.get("duration", 0)) / 60),
             distance_m=int(path.get("distance", 0))
         )
 
@@ -417,8 +485,8 @@ class MapClient(BaseAPIClient):
         """
         endpoint = "direction/transit/integrated"
         params = {
-            "origin": origin,
-            "destination": destination,
+            "origin": self._normalize_coordinate_pair(origin),
+            "destination": self._normalize_coordinate_pair(destination),
             "key": self.config.MAP_API_KEY,
             "city": city,  # 必填参数
             "strategy": str(strategy),
@@ -443,43 +511,46 @@ class MapClient(BaseAPIClient):
         routes = []
         # 取前3条路线
         for transit in transits[:3]:
+            if not isinstance(transit, dict):
+                continue
             segments = []
 
-            # 解析公交段详细信息
+            # 解析公交/地铁段。高德 v3 的耗时/距离位于 busline 层（步行段在 walking 层），
+            # segment 顶层并无 duration/distance/price；旧实现读顶层导致每段耗时距离恒为 0。
             for step_data in transit.get("segments", []):
-                # 公交/地铁段
-                bus_info = step_data.get("bus", {})
-                buslines = bus_info.get("buslines", [])
+                if not isinstance(step_data, dict):
+                    continue
+                bus_info = step_data.get("bus") or {}
+                buslines = bus_info.get("buslines") if isinstance(bus_info, dict) else None
+                if not buslines:
+                    continue
+                for busline in buslines:
+                    if not isinstance(busline, dict):
+                        continue
+                    line_name = self._safe_get_string(busline, "name")
+                    departure_stop_obj = busline.get("departure_stop") or {}
+                    arrival_stop_obj = busline.get("arrival_stop") or {}
 
-                if buslines:
-                    for busline in buslines:
-                        # 判断是地铁还是公交
-                        line_name = self._safe_get_string(busline, "name")
-                        is_subway = "地铁" in line_name or "轻轨" in line_name
+                    # 耗时/距离优先取 busline 层，回退 segment 顶层兼容旧结构
+                    duration_sec = self._safe_int(busline.get("duration")) or self._safe_int(step_data.get("duration"))
+                    distance_m = self._safe_int(busline.get("distance")) or self._safe_int(step_data.get("distance"))
+                    price_yuan = self._safe_int(step_data.get("price")) or self._safe_int(busline.get("price"))
 
-                        # 获取站点信息
-                        departure_stop_obj = busline.get("departure_stop", {})
-                        arrival_stop_obj = busline.get("arrival_stop", {})
-
-                        segment = TransitSegment(
-                            type="subway" if is_subway else "bus",
+                    try:
+                        segments.append(TransitSegment(
+                            type="subway" if self._is_subway_line(busline, line_name) else "bus",
                             line_name=line_name,
                             line_id=self._safe_get_string(busline, "id"),
-                            departure_stop=self._safe_get_string(departure_stop_obj, "name") if isinstance(departure_stop_obj, dict) else str(departure_stop_obj),
-                            arrival_stop=self._safe_get_string(arrival_stop_obj, "name") if isinstance(arrival_stop_obj, dict) else str(arrival_stop_obj),
-                            duration_min=int(int(step_data.get("duration", 0)) / 60),
-                            distance_m=int(step_data.get("distance", 0)),
-                            price_yuan=int(float(step_data.get("price", 0) or 0)),
-                            operator=self._safe_get_string(busline, "operator")
-                        )
-                        segments.append(segment)
-
-                # 步行段（如果有单独的步行段）
-                walking_info = step_data.get("walking", {})
-                if walking_info and walking_info.get("distance"):
-                    # 步行段不作为TransitSegment，但可以记录步行距离
-
-                    pass
+                            departure_stop=self._stop_name(departure_stop_obj),
+                            arrival_stop=self._stop_name(arrival_stop_obj),
+                            duration_min=max(0, int(duration_sec / 60)),
+                            distance_m=max(0, distance_m),
+                            price_yuan=max(0, price_yuan),
+                            operator=self._safe_get_string(busline, "operator"),
+                        ))
+                    except Exception as e:
+                        logger.debug("解析公交段失败: %s", e)
+                        continue
 
             # 获取票价
             cost_str = transit.get("cost", "0")
@@ -504,36 +575,6 @@ class MapClient(BaseAPIClient):
         return routes
 
     @handle_api_errors
-    def distance_matrix(self, origins: List[str], destinations: List[str],
-                       strategy: str = "LEAST_TIME") -> Dict:
-        """距离矩阵查询"""
-        endpoint = "distance/batch"
-        params = {
-            "origins": ";".join(origins),
-            "destinations": ";".join(destinations),
-            "key": self.config.MAP_API_KEY
-        }
-
-        return self._make_request("GET", endpoint, params=params)
-
-    @handle_api_errors
-    def place_search(self, keywords: str, city: str = None,
-                     bbox: str = None, page_size: int = 10) -> Dict:
-        """地点搜索"""
-        endpoint = "place/text"
-        params = {
-            "keywords": keywords,
-            "key": self.config.MAP_API_KEY,
-            "page_size": page_size
-        }
-        if city:
-            params["city"] = city
-        if bbox:
-            params["bbox"] = bbox
-
-        return self._make_request("GET", endpoint, params=params)
-
-    @handle_api_errors
     def search_around(self, location: str, keywords: str,
                       radius: int = 10000, page_size: int = 20) -> List[Dict]:
         """
@@ -554,12 +595,13 @@ class MapClient(BaseAPIClient):
         """
         endpoint = "place/around"
         params = {
-            "location": location,
+            "location": self._normalize_coordinate_pair(location),
             "keywords": keywords,
             "key": self.config.MAP_API_KEY,
             "radius": str(radius),
             "extensions": "all",  # 返回详细信息
-            "offset": str(min(page_size, 25))  # 高德限制最大25
+            "offset": str(min(page_size, 25)),
+            "page": "1",
         }
 
         response = self._make_request("GET", endpoint, params=params)
@@ -578,6 +620,7 @@ class MapClient(BaseAPIClient):
                 distance = float(distance_str) if distance_str else None
 
                 results.append({
+                    "id": self._safe_get_string(poi, "id"),
                     "name": self._safe_get_string(poi, "name"),
                     "type": self._safe_get_string(poi, "type"),
                     "typecode": self._safe_get_string(poi, "typecode"),
@@ -594,85 +637,4 @@ class MapClient(BaseAPIClient):
                 continue
 
         logger.info(f"周边搜索找到 {len(results)} 个结果: keywords={keywords}")
-        return results
-
-    @handle_api_errors
-    def get_transport_routes(self, origin: str, destination: str,
-                           city: str = None) -> TransportRoutes:
-        """获取综合交通路线"""
-        from src.schemas.transport import LocationInfo, RouteSummary
-
-        transport_routes = TransportRoutes(
-            origin=LocationInfo(address=origin),
-            destination=LocationInfo(address=destination),
-            outbound={},
-            summary=RouteSummary()
-        )
-
-        try:
-            # 获取驾车路线
-            driving_route = self.driving_route(origin, destination)
-            transport_routes.outbound["driving"] = driving_route.model_dump()
-
-            # 获取步行路线
-            walking_route = self.walking_route(origin, destination)
-            transport_routes.outbound["walking"] = walking_route.model_dump()
-
-            # 获取公交路线
-            if city:
-                transit_routes = self.transit_route(origin, destination, city)
-                if transit_routes:
-                    # 取第一条公交路线作为默认
-                    transport_routes.outbound["transit"] = transit_routes[0].model_dump()
-
-                    # 提取打车费用（如果有）
-                    for route in transit_routes:
-                        if hasattr(route, 'segments') and route.segments:
-                            for segment in route.segments:
-                                if segment.type == "walk":
-                                    transport_routes.walking_distance_m += segment.distance_m
-
-            # 设置推荐方案
-            fastest_mode = min(
-                [(mode, route.get("duration_min", float('inf')))
-                  for mode, route in transport_routes.outbound.items()],
-                key=lambda x: x[1]
-            )
-            if fastest_mode[1] != float('inf'):
-                transport_routes.fastest_mode = fastest_mode[0]
-
-            cheapest_mode = min(
-                [(mode, route.get("cost_yuan", 0) if mode != "walking" else 0)
-                  for mode, route in transport_routes.outbound.items()],
-                key=lambda x: x[1]
-            )
-            transport_routes.cheapest_mode = cheapest_mode[0]
-
-            # 根据距离和时间推荐
-            if transport_routes.outbound.get("driving"):
-                driving = transport_routes.outbound["driving"]
-                if driving["distance_km"] < 50:  # 50公里以内
-                    transport_routes.recommended_mode = "driving"
-                else:
-                    transport_routes.recommended_mode = "transit" if transport_routes.outbound.get("transit") else "driving"
-
-            # 设置打车费用（从驾车路线中提取，如果有）
-            if transport_routes.outbound.get("driving"):
-                transport_routes.taxi_cost_yuan = transport_routes.outbound["driving"].get("tolls_yuan", 0)
-
-        except APIError as e:
-            logger.error(f"获取交通路线失败: {str(e)}")
-
-        return transport_routes
-
-    def get_batch_geocode(self, addresses: List[str]) -> List[Optional[GeocodeResult]]:
-        """批量地理编码"""
-        results = []
-        for address in addresses:
-            try:
-                result = self.geocode(address)
-                results.append(result)
-            except APIError as e:
-                logger.warning(f"地理编码失败 {address}: {str(e)}")
-                results.append(None)
         return results

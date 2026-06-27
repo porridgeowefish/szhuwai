@@ -1,184 +1,26 @@
-# ====================================
-# 户外活动规划助手 - Docker Compose 配置
-# ====================================
-# 本地和云端统一部署方式：
-#   docker-compose up -d
-# ====================================
-
 services:
-  # ====================================
-  # MySQL 数据库服务
-  # ====================================
-  mysql:
-    image: mysql:8.0
-    container_name: outdoor-mysql
-    restart: unless-stopped
-    ports:
-      - "3307:3306"
-    environment:
-      MYSQL_ROOT_PASSWORD: ${MYSQL_PASSWORD:-123456}
-      MYSQL_DATABASE: ${MYSQL_DATABASE:-outdoor_planner}
-    volumes:
-      - mysql_data:/var/lib/mysql
-      - ./scripts/init_mysql.sql:/docker-entrypoint-initdb.d/init.sql:ro
-    networks:
-      - outdoor-network
-    command: --default-authentication-plugin=mysql_native_password
-    healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_PASSWORD:-123456}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # ====================================
-  # MongoDB 数据库服务
-  # ====================================
-  mongodb:
-    image: mongo:8.0
-    container_name: outdoor-mongodb
-    restart: unless-stopped
-    ports:
-      - "27017:27017"
-    environment:
-      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-outdoor_planner}
-    volumes:
-      - mongodb_data:/data/db
-      - mongodb_config:/data/configdb
-      - ./scripts/setup_mongodb.js:/docker-entrypoint-initdb.d/setup.js:ro
-    networks:
-      - outdoor-network
-    healthcheck:
-      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-
-  # ====================================
-  # Redis 缓存服务
-  # ====================================
-  redis:
-    image: redis:7-alpine
-    container_name: outdoor-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - redis_data:/data
-    networks:
-      - outdoor-network
-    command: redis-server --appendonly yes
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ====================================
-  # PostgreSQL + PostGIS 数据库服务
-  # ====================================
-  postgres:
-    image: postgis/postgis:16-3.4
-    container_name: outdoor-postgres
-    restart: unless-stopped
-    ports:
-      - "5432:5432"
-    environment:
-      POSTGRES_DB: ${POSTGRES_DATABASE:-outdoor_planner}
-      POSTGRES_USER: ${POSTGRES_USER:-outdoor_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-outdoor_pass_2024}
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - outdoor-network
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U outdoor_user -d outdoor_planner"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ====================================
-  # 后端服务
-  # ====================================
   backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile
-    container_name: outdoor-backend
+    build: ./backend
     restart: unless-stopped
+    # 把 backend/.env 注入容器环境变量（AMAP/QWEATHER/SEARCH 等 key）。
+    # 不加这一行，容器里所有 key 为空，/plan/generate 会全部降级。
+    env_file:
+      - ./backend/.env
     ports:
       - "8000:8000"
-    env_file:
-      - backend/.env
-    environment:
-      # Docker 服务名作为数据库主机
-      MYSQL_HOST: mysql
-      MYSQL_PORT: 3306
-      MONGO_HOST: mongodb
-      MONGO_PORT: 27017
-      POSTGRES_HOST: postgres
-      POSTGRES_PORT: 5432
-      # 清除代理配置（Docker 内部访问不需要）
-      HTTP_PROXY: ""
-      HTTPS_PROXY: ""
-      http_proxy: ""
-      https_proxy: ""
-      PROXY_HTTP: ""
-      PROXY_HTTPS: ""
-    volumes:
-      - ./backend/temp_tracks:/app/temp_tracks
     networks:
       - outdoor-network
-    depends_on:
-      mysql:
-        condition: service_healthy
-      mongodb:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      postgres:
-        condition: service_healthy
 
-  # ====================================
-  # 前端服务
-  # ====================================
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    container_name: outdoor-frontend
+    build: ./frontend
     restart: unless-stopped
     ports:
       - "80:80"
+    depends_on:
+      - backend
     networks:
       - outdoor-network
-    depends_on:
-      backend:
-        condition: service_started
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:80"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
 
-# ====================================
-# 网络配置
-# ====================================
 networks:
   outdoor-network:
     driver: bridge
-    name: outdoor-network
-
-# ====================================
-# 数据卷配置
-# ====================================
-volumes:
-  mongodb_data:
-    name: outdoor_mongodb_data
-  mongodb_config:
-    name: outdoor_mongodb_config
-  mysql_data:
-    name: outdoor_mysql_data
-  redis_data:
-    name: outdoor_redis_data
-  postgres_data:
-    name: outdoor_postgres_data

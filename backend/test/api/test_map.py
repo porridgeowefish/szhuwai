@@ -11,7 +11,7 @@ from src.api.config import APIConfig
 from src.api.map_client import MapClient
 from src.api.utils import APIError
 from src.schemas.transport import (
-    GeocodeResult, DrivingRoute, TransitRoute, TransportRoutes
+    GeocodeResult, DrivingRoute, TransitRoute
 )
 
 
@@ -264,6 +264,108 @@ class TestMapClient:
         assert route.line_name == "地铁4号线大兴线"
 
     @patch('src.api.map_client.MapClient._make_request')
+    def test_transit_route_realistic_structure(self, mock_request):
+        """真实高德 v3 结构：耗时/距离在 busline 层，segment 顶层无这些字段。
+
+        旧实现读 segment 顶层 → 每段耗时距离恒为 0；此处锁定字段层级对齐。
+        """
+        mock_request.return_value = {
+            "status": "1",
+            "info": "OK",
+            "route": {
+                "transits": [
+                    {
+                        "distance": 12000,
+                        "duration": 2400,
+                        "cost": "5",
+                        "walking_distance": 800,
+                        "segments": [
+                            {"walking": {"distance": 300, "duration": 240}},
+                            {"bus": {"buslines": [{
+                                "name": "地铁昌平线",
+                                "type": "地铁线路",
+                                "id": "BC",
+                                "departure_stop": {"name": "西二旗"},
+                                "arrival_stop": {"name": "生命科学园"},
+                                "via_num": 2,
+                                "duration": 480,
+                                "distance": 4000,
+                                "operator": "北京地铁"
+                            }]}},
+                            {"bus": {"buslines": [{
+                                "name": "运通101路",
+                                "type": "普通公交",
+                                "id": "YM101",
+                                "departure_stop": {"name": "生命科学园"},
+                                "arrival_stop": {"name": "软件园"},
+                                "duration": 600,
+                                "distance": 5000,
+                                "operator": "北京公交"
+                            }]}}
+                        ]
+                    }
+                ]
+            }
+        }
+
+        config = APIConfig()
+        client = MapClient(config)
+        routes = client.transit_route("116.3,40.0", "116.4,40.1", "北京")
+
+        assert len(routes) == 1
+        route = routes[0]
+        # 路线级字段（在 transits[i] 层）
+        assert route.duration_min == 40          # 2400s / 60
+        assert route.distance_km == 12.0
+        assert route.cost_yuan == 5
+        assert route.walking_distance == 800
+        # 步行段被跳过，只保留 2 个公交/地铁段
+        assert len(route.segments) == 2
+
+        seg0 = route.segments[0]
+        assert seg0.type == "subway"             # type 字段识别
+        assert seg0.line_name == "地铁昌平线"
+        assert seg0.departure_stop == "西二旗"
+        assert seg0.arrival_stop == "生命科学园"
+        assert seg0.duration_min == 8            # 480s 来自 busline，不是 segment 顶层
+        assert seg0.distance_m == 4000
+
+        seg1 = route.segments[1]
+        assert seg1.type == "bus"
+        assert seg1.line_name == "运通101路"
+        assert seg1.duration_min == 10           # 600s / 60
+        assert seg1.distance_m == 5000
+
+    @patch('src.api.map_client.MapClient._make_request')
+    def test_subway_detection_variants(self, mock_request):
+        """地铁识别：优先 type 字段，缺失时用线路名正则（机场线/有轨电车）。"""
+        mock_request.return_value = {
+            "status": "1",
+            "info": "OK",
+            "route": {
+                "transits": [{
+                    "distance": 1000,
+                    "duration": 600,
+                    "cost": "0",
+                    "walking_distance": 0,
+                    "segments": [
+                        {"bus": {"buslines": [{"name": "地铁亦庄线", "type": "地铁线路"}]}},
+                        {"bus": {"buslines": [{"name": "机场线"}]}},
+                        {"bus": {"buslines": [{"name": "有轨电车T1线"}]}},
+                        {"bus": {"buslines": [{"name": "345路"}]}},
+                    ]
+                }]
+            }
+        }
+
+        config = APIConfig()
+        client = MapClient(config)
+        routes = client.transit_route("116.3,40.0", "116.4,40.1", "北京")
+
+        types = [s.type for s in routes[0].segments]
+        assert types == ["subway", "subway", "subway", "bus"]
+
+    @patch('src.api.map_client.MapClient._make_request')
     def test_driving_route_with_tolls(self, mock_request):
         """测试驾车路线包含过路费"""
         mock_request.return_value = {
@@ -308,83 +410,6 @@ class TestMapClient:
         assert result.distance_km == 50.0
         assert result.duration_min == 60
         assert result.tolls_yuan == 25
-
-    @patch('src.api.map_client.MapClient._make_request')
-    def test_transport_routes_with_taxi_cost(self, mock_request):
-        """测试综合路线包含打车费用"""
-        mock_request.side_effect = [
-            # 驾车路线
-            {
-                "status": "1",
-                "info": "OK",
-                "route": {
-                    "taxi_cost": "45",
-                    "paths": [
-                        {
-                            "distance": 15000,
-                            "duration": 1800,
-                            "tolls": 10,
-                            "traffic_lights": 5
-                        }
-                    ]
-                }
-            },
-            # 步行路线
-            {
-                "status": "1",
-                "info": "OK",
-                "route": {
-                    "paths": [
-                        {
-                            "distance": 500,
-                            "duration": 400
-                        }
-                    ]
-                }
-            },
-            # 公交路线
-            {
-                "status": "1",
-                "info": "OK",
-                "route": {
-                    "transits": [
-                        {
-                            "distance": 10000,
-                            "duration": 3600,
-                            "cost": "4",
-                            "walking_distance": 1000,
-                            "segments": [
-                                {
-                                    "bus": {
-                                        "buslines": [
-                                            {
-                                                "name": "地铁1号线",
-                                                "departure_stop": {"name": "国贸"},
-                                                "arrival_stop": {"name": "西直门"},
-                                                "operator": "北京地铁"
-                                            }
-                                        ]
-                                    },
-                                    "duration": 3000,
-                                    "distance": 9000,
-                                    "price": "3"
-                                }
-                            ]
-                        }
-                    ]
-                }
-            }
-        ]
-
-        config = APIConfig()
-        client = MapClient(config)
-        result = client.get_transport_routes("国贸桥", "西直门", "北京")
-
-        assert isinstance(result, TransportRoutes)
-        assert result.outbound["driving"]["tolls_yuan"] == 10
-        assert result.outbound["transit"]["cost_yuan"] == 4
-        # taxi_cost 从 route.taxi_cost 获取
-        assert result.outbound["driving"]["taxi_cost_yuan"] == 45
 
     @patch('src.api.map_client.MapClient._make_request')
     def test_retry_mechanism(self, mock_request):

@@ -255,7 +255,19 @@
       "Bash(cmd.exe *)",
       "Bash(powershell *)",
       "Bash(xxd)",
-      "Bash(powershell.exe -Command \"Set-Location 'D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code'; cmd.exe /c 'scripts\\\\1-build.bat'\")"
+      "Bash(powershell.exe -Command \"Set-Location 'D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code'; cmd.exe /c 'scripts\\\\1-build.bat'\")",
+      "Bash(docker rm *)",
+      "Bash(docker stop *)",
+      "Bash(docker restart *)",
+      "Bash(docker kill *)",
+      "Bash(docker version *)",
+      "Bash(docker info *)",
+      "Bash(break)",
+      "Bash(echo \"=== 1\\) 高德 直连\\(不走代理\\) ===\")",
+      "Bash(curl -s --noproxy * --max-time 15 'https://restapi.amap.com/v3/geocode/geo?address=%E6%B7%B1%E5%9C%B3&key=0ccf32829c5857a8243d7b5d1d84f63b')",
+      "Bash(echo \"\")",
+      "Bash(echo \"=== 2\\) 高德 走 7890 代理 ===\")",
+      "Bash(curl -s --proxy http://127.0.0.1:7890 --max-time 15 'https://restapi.amap.com/v3/geocode/geo?address=%E6%B7%B1%E5%9C%B3&key=0ccf32829c5857a8243d7b5d1d84f63b')"
     ]
   }
 }

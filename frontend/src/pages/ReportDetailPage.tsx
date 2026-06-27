@@ -1,22 +1,19 @@
 import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import {
   ShieldAlert, CloudSun, MapPin, Backpack, Navigation, PhoneCall, Clock,
-  Thermometer, Wind, Droplets, Sun, Eye, AlertTriangle, CheckCircle2, Info,
-  Mountain, ArrowUp, ArrowDown, Cloud, Timer, Gauge, Trees, Landmark,
-  Snowflake, Download, Tent, Map as MapIcon, List, FileText
+  Thermometer, Wind, Droplets, Sun, AlertTriangle, CheckCircle2, Info,
+  Mountain, ArrowUp, Snowflake, Download, Image as ImageIcon, Map as MapIcon,
+  List, ClipboardCheck
 } from 'lucide-react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
-import { motion, AnimatePresence } from 'motion/react';
-import { PlanData, SafetyIssue, EquipmentItem, TransitRoute } from '../types';
-import { calculateWindChill, windScaleToSpeed, getWindChillRisk } from '../utils/weather';
-import { exportToPDF } from '../utils/pdf';
+import { PlanData, SafetyIssue, EquipmentItem } from '../types';
+import type { PlanningRunReport } from '../lib/api/plan';
+import { calculateFeelsLike, calculateWindChill, windScaleToSpeed, getWindChillRisk } from '../utils/weather';
+import { exportToLongImage, exportToPDF } from '../utils/pdf';
 import { cn } from '../utils/cn';
-import { reportsAPI } from '../lib/api/reports';
-import { ReportDocument } from '../lib/api/types';
-import EmptyState from '../components/common/EmptyState';
 import { RouteBrief } from '../components/RouteBrief';
 import { TrackDetailSection } from '../components/TrackDetailSection';
 
@@ -77,6 +74,32 @@ const Badge = ({ children, variant = 'default' }: {
   );
 };
 
+const EmptyModule = ({ icon: Icon, title, description }: {
+  icon: React.ElementType;
+  title: string;
+  description: string;
+}) => (
+  <div className="rounded-xl border border-dashed border-[var(--stone)] bg-[var(--sand)] p-5 text-center">
+    <Icon className="mx-auto text-zinc-400" size={24} />
+    <div className="mt-2 text-sm font-bold text-zinc-700">{title}</div>
+    <p className="mt-1 text-xs leading-5 text-zinc-500">{description}</p>
+  </div>
+);
+
+const WeatherMetric = ({ icon: Icon, label, value }: {
+  icon: React.ElementType;
+  label: string;
+  value: string;
+}) => (
+  <div className="rounded-xl border border-[var(--stone)] bg-white px-3 py-3">
+    <div className="flex items-center gap-1.5 text-xs text-zinc-500">
+      <Icon size={14} className="text-zinc-400" />
+      {label}
+    </div>
+    <div className="mt-1 text-sm font-bold text-zinc-900">{value}</div>
+  </div>
+);
+
 // 目录导航项配置
 interface TocItem {
   id: string;
@@ -87,57 +110,50 @@ interface TocItem {
 const ReportDetailPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { id } = useParams<{ id: string }>();
   const mainContentRef = useRef<HTMLDivElement>(null);
+  const [exporting, setExporting] = useState<null | 'image' | 'pdf'>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [activeSection, setActiveSection] = useState<string>('');
 
   // 从路由 state 获取计划数据，或从 API 获取
   const statePlan = location.state?.plan as PlanData | null;
-  const [plan, setPlan] = useState<PlanData | null>(statePlan);
-  const [loading, setLoading] = useState(!statePlan);
-  const [fetchError, setFetchError] = useState(false);
-  const [weatherTab, setWeatherTab] = useState<'overview' | 'hourly'>('overview');
-
-  // 当没有 route state 时，从 API 获取报告数据
-  useEffect(() => {
-    if (!statePlan && id) {
-      setLoading(true);
-      setFetchError(false);
-      reportsAPI.get(id)
-        .then((data) => {
-          // 响应拦截器已解包 response.data.data，运行时拿到 ReportDocument
-          const report = data as unknown as ReportDocument;
-          if (report.content) {
-            setPlan(report.content as unknown as PlanData);
-          } else {
-            setFetchError(true);
-          }
-        })
-        .catch(() => {
-          setFetchError(true);
-        })
-        .finally(() => {
-          setLoading(false);
-        });
+  const stateRunReport = location.state?.runReport as PlanningRunReport | null;
+  const storedPlan = useMemo<PlanData | null>(() => {
+    if (statePlan) return statePlan;
+    try {
+      const raw = sessionStorage.getItem('latest-plan');
+      return raw ? JSON.parse(raw) as PlanData : null;
+    } catch {
+      return null;
     }
-  }, [id, statePlan]);
+  }, [statePlan]);
+  const runReport = useMemo<PlanningRunReport | null>(() => {
+    if (stateRunReport) return stateRunReport;
+    try {
+      const raw = sessionStorage.getItem('latest-run-report');
+      return raw ? JSON.parse(raw) as PlanningRunReport : null;
+    } catch {
+      return null;
+    }
+  }, [stateRunReport]);
+  const plan = storedPlan;
 
   // 根据实际内容动态生成目录项
   const tocItems = useMemo<TocItem[]>(() => {
     if (!plan) return [];
     const items: TocItem[] = [
       { id: 'section-route-brief', label: '线路简介', icon: Navigation },
-      { id: 'section-scenic', label: '沿途风光', icon: MapIcon },
     ];
     if (plan.trackDetail) {
       items.push({ id: 'section-track-detail', label: '线路详情', icon: Mountain });
     }
+    items.push({ id: 'section-weather', label: '天气预报', icon: CloudSun });
+    items.push({ id: 'section-guide', label: '出行攻略', icon: ClipboardCheck });
     if (plan.transportScheme) {
       items.push({ id: 'section-transport', label: '交通方案', icon: MapPin });
     }
     items.push(
       { id: 'section-safety', label: '安全评估', icon: ShieldAlert },
-      { id: 'section-weather', label: '天气预报', icon: CloudSun },
       { id: 'section-equipment', label: '装备清单', icon: Backpack },
     );
     return items;
@@ -194,33 +210,47 @@ const ReportDetailPage: React.FC = () => {
     }
   }, []);
 
-  if (loading) {
+  if (!plan) {
     return (
-      <div className="min-h-screen bg-[var(--sand)] flex items-center justify-center">
-        <div className="w-10 h-10 border-2 border-[var(--stone)] border-t-[var(--forest)] rounded-full animate-spin" />
+      <div className="flex min-h-[70vh] items-center justify-center px-4">
+        <div className="max-w-md rounded-2xl border border-[var(--border)] bg-white p-8 text-center">
+          <h1 className="text-xl font-bold">暂无策划结果</h1>
+          <p className="mt-2 text-sm text-[var(--muted)]">请先从两步路线路 URL 生成一份策划。</p>
+          <button className="primary-button mt-5" onClick={() => navigate('/')}>返回开始策划</button>
+        </div>
       </div>
     );
   }
 
-  if (fetchError || !plan) {
-    return (
-      <div className="min-h-screen bg-[var(--sand)] flex items-center justify-center">
-        <EmptyState
-          icon={FileText}
-          title={fetchError ? '加载失败' : '报告不存在'}
-          description={fetchError ? '网络异常或服务器错误，请稍后重试' : '该报告可能已被删除或链接无效'}
-          action={{ label: '返回报告列表', onClick: () => navigate('/reports') }}
-          className="border-none py-0"
-        />
-      </div>
-    );
-  }
-
-  const getRatingVariant = (rating: string) => {
-    if (rating === '推荐') return 'success';
-    if (rating === '谨慎推荐') return 'warning';
-    return 'error';
+  const defaultWeather = {
+    fxDate: '未选择日期',
+    tempMax: 0,
+    tempMin: 0,
+    textDay: '暂无天气数据',
+    windScaleDay: '未知',
+    windSpeedDay: 0,
+    humidity: 0,
+    precip: 0,
+    pressure: 0,
   };
+  const tripDateWeather = plan.tripDateWeather || defaultWeather;
+  const hourlyWeather = plan.hourlyWeather || [];
+  const criticalGridWeather = plan.criticalGridWeather || [];
+  const webReferences = plan.webReferences || [];
+  const equipmentRecommendations = plan.equipmentRecommendations || [];
+  const safetyIssues = plan.safetyIssues || [];
+  const riskFactors = plan.riskFactors || [];
+  const rescueContacts = plan.emergencyRescueContacts || [];
+  const hasRealWeather = tripDateWeather.textDay !== '暂无天气数据' && Boolean(plan.tripDateWeather);
+  const webSummary = plan.webSummary?.trim();
+  const weatherBasePoint = criticalGridWeather.find((grid) => grid.pointType === '地区基准') || criticalGridWeather[0];
+  const representativeTemp = weatherBasePoint?.temp ?? Math.round((tripDateWeather.tempMax + tripDateWeather.tempMin) / 2);
+  const dailyWindSpeed = windScaleToSpeed(tripDateWeather.windScaleDay);
+  const dailyFeelsLike = calculateFeelsLike(representativeTemp, dailyWindSpeed.avg, tripDateWeather.humidity);
+  const dailyWindChill = calculateWindChill(representativeTemp, dailyWindSpeed.avg);
+  const estimatedWeatherPoints = criticalGridWeather.filter((grid) =>
+    ['起点', '最高点', '终点'].includes(grid.pointType)
+  );
 
   return (
     <div className="min-h-screen bg-[var(--sand)] text-zinc-900 font-sans">
@@ -232,28 +262,54 @@ const ReportDetailPage: React.FC = () => {
               <h1 className="text-2xl font-black tracking-tight" style={{ fontFamily: 'Playfair Display, serif' }}>
                 {plan.planName}
               </h1>
-              <Badge variant={getRatingVariant(plan.overallRating)}>{plan.overallRating}</Badge>
             </div>
             <div className="flex items-center gap-4 text-xs text-zinc-500 font-mono">
               <span className="flex items-center gap-1"><Clock size={12} /> {formatDateTime(plan.createdAt)}</span>
               <span className="flex items-center gap-1">ID: {plan.planId}</span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="no-print flex flex-wrap items-center gap-2">
             <button
               onClick={async () => {
-                if (mainContentRef.current && plan) {
-                  try {
-                    await exportToPDF(mainContentRef.current, plan.planName);
-                  } catch (err) {
-                    console.error('PDF导出错误:', err);
-                  }
+                if (!mainContentRef.current || !plan || exporting) return;
+                setExporting('image');
+                setExportError(null);
+                try {
+                  await exportToLongImage(mainContentRef.current, plan.planName);
+                } catch (err) {
+                  console.error('长图导出错误:', err);
+                  setExportError('长图导出失败：页面可能过长或地图瓦片跨域受限，建议缩小窗口或改用 PDF。');
+                } finally {
+                  setExporting(null);
                 }
               }}
-              className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-colors flex items-center gap-2"
+              disabled={exporting !== null}
+              className="px-4 py-2 bg-white text-zinc-900 rounded-xl text-sm font-bold hover:bg-zinc-100 transition-colors flex items-center gap-2 border border-[var(--stone)] disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              <Download size={16} /> 导出策划书
+              <ImageIcon size={16} /> {exporting === 'image' ? '生成中…' : '导出长图'}
             </button>
+            <button
+              onClick={async () => {
+                if (!plan || exporting) return;
+                setExporting('pdf');
+                setExportError(null);
+                try {
+                  await exportToPDF();
+                } catch (err) {
+                  console.error('PDF导出错误:', err);
+                  setExportError('PDF 打印启动失败：请检查浏览器是否拦截了打印弹窗，或换用桌面端浏览器。');
+                } finally {
+                  setExporting(null);
+                }
+              }}
+              disabled={exporting !== null}
+              className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-sm font-bold hover:bg-zinc-800 transition-colors flex items-center gap-2 disabled:opacity-60 disabled:cursor-not-allowed"
+            >
+              <Download size={16} /> {exporting === 'pdf' ? '准备打印…' : '导出 PDF'}
+            </button>
+            {exportError ? (
+              <span className="text-xs font-semibold text-red-600">{exportError}</span>
+            ) : null}
           </div>
         </div>
       </header>
@@ -319,9 +375,42 @@ const ReportDetailPage: React.FC = () => {
             <RouteBrief
               planName={plan.planName}
               trackDetail={plan.trackDetail}
-              overallRating={plan.overallRating}
             />
           </section>
+
+          {runReport && (
+            <section className="scroll-mt-32 lg:scroll-mt-24">
+              <Card className="p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-bold text-zinc-900">运行回执</div>
+                    <div className="mt-1 text-xs text-zinc-500">Run {runReport.run_id} · {runReport.total_duration_ms}ms</div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {runReport.stages.map((stage) => (
+                      <span
+                        key={`${stage.stage}-${stage.title}`}
+                        className={cn(
+                          'rounded-full border px-2.5 py-1 text-[11px] font-bold',
+                          stage.status === 'success' && 'border-emerald-200 bg-emerald-50 text-emerald-700',
+                          stage.status === 'degraded' && 'border-amber-200 bg-amber-50 text-amber-700',
+                          stage.status === 'skipped' && 'border-zinc-200 bg-zinc-50 text-zinc-500',
+                          stage.status === 'failed' && 'border-rose-200 bg-rose-50 text-rose-700',
+                        )}
+                      >
+                        {stage.title}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {runReport.warnings.length > 0 && (
+                  <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-5 text-amber-800">
+                    {runReport.warnings.join('；')}
+                  </div>
+                )}
+              </Card>
+            </section>
+          )}
 
           {/* 2. 线路详情 */}
           {plan.trackDetail && (
@@ -331,45 +420,146 @@ const ReportDetailPage: React.FC = () => {
             </section>
           )}
 
-          {/* 3. 沿途风光 */}
-          <section id="section-scenic" className="scroll-mt-32 lg:scroll-mt-24">
-            <SectionTitle title="沿途风光" icon={MapIcon} colorClass="text-indigo-600" />
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {plan.scenicSpots.map((spot, idx) => (
-                <Card key={idx} className="group hover:border-indigo-200 transition-all">
-                  <div className="flex gap-4">
-                    <div className={cn(
-                      'w-12 h-12 rounded-xl flex items-center justify-center shrink-0 transition-colors',
-                      spot.spotType === '自然风光'
-                        ? 'bg-[var(--forest)]/10 text-[var(--forest)] group-hover:bg-[var(--forest)] group-hover:text-white'
-                        : 'bg-amber-50 text-amber-600 group-hover:bg-amber-600 group-hover:text-white'
-                    )}>
-                      {spot.spotType === '自然风光' ? <Trees size={24} /> : <Landmark size={24} />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 mb-1">
-                        <h4 className="font-bold text-sm">{spot.name}</h4>
-                        <span className={cn(
-                          'text-[10px] px-2 py-0.5 rounded-full',
-                          spot.spotType === '自然风光'
-                            ? 'bg-[var(--forest)]/10 text-[var(--forest)]'
-                            : 'bg-amber-50 text-amber-600'
-                        )}>
-                          {spot.spotType}
-                        </span>
+          {/* 3. 天气预报 */}
+          <section id="section-weather" className="scroll-mt-32 lg:scroll-mt-24">
+            <SectionTitle title="天气预报" icon={CloudSun} colorClass="text-blue-600" />
+            <Card className="space-y-5">
+              {hasRealWeather ? (
+                <>
+                  <div className="grid gap-4 lg:grid-cols-[minmax(0,0.9fr)_minmax(280px,1fr)]">
+                    <div>
+                      <div className="flex flex-wrap items-end gap-4">
+                        <div className="text-5xl font-black tracking-tight">
+                          {tripDateWeather.tempMax}°<span className="text-zinc-300">/</span>{tripDateWeather.tempMin}°
+                        </div>
+                        <div className="pb-1">
+                          <div className="text-sm font-bold text-zinc-900">{tripDateWeather.textDay}</div>
+                          <div className="text-xs text-zinc-500">{tripDateWeather.fxDate}</div>
+                        </div>
                       </div>
-                      <p className="text-sm text-zinc-600 leading-relaxed">{spot.description}</p>
+                      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                        <WeatherMetric icon={Wind} label="风力" value={`${tripDateWeather.windScaleDay}级`} />
+                        <WeatherMetric icon={Droplets} label="降水" value={`${tripDateWeather.precip}mm`} />
+                        <WeatherMetric icon={Thermometer} label="体感" value={`${dailyFeelsLike}°C`} />
+                        <WeatherMetric icon={Sun} label="紫外线" value={tripDateWeather.uvIndex != null ? `${tripDateWeather.uvIndex} · ${weatherBasePoint?.uvLevel || '待评估'}` : '暂无'} />
+                      </div>
+                      {dailyWindChill !== null ? (
+                        <div className={cn('mt-3 inline-flex items-center gap-2 rounded-full bg-zinc-50 px-3 py-1 text-xs font-medium', getWindChillRisk(dailyWindChill).color)}>
+                          <Snowflake size={13} />
+                          风寒 {dailyWindChill}°C，{getWindChillRisk(dailyWindChill).description}
+                        </div>
+                      ) : null}
+                      {weatherBasePoint ? (
+                        <div className="mt-4 rounded-xl border border-[var(--stone)] bg-[var(--sand)] p-3 text-xs leading-5 text-zinc-600">
+                          <div className="font-bold text-zinc-900">地区基准：{weatherBasePoint.temp}°C</div>
+                          <div>风力 {weatherBasePoint.windScale} · 湿度 {weatherBasePoint.humidity}% · 紫外线 {weatherBasePoint.uvLevel || '待评估'}</div>
+                          {weatherBasePoint.note ? <div className="mt-1 text-zinc-500">{weatherBasePoint.note}</div> : null}
+                        </div>
+                      ) : null}
+                    </div>
+
+                    <div className="rounded-xl bg-[var(--sand)] p-4">
+                      <div className="mb-3 text-xs font-bold uppercase tracking-widest text-zinc-400">海拔估算节点</div>
+                      <div className="space-y-2">
+                        {estimatedWeatherPoints.length > 0 ? estimatedWeatherPoints.map((grid, idx) => (
+                          <div key={`${grid.pointType}-${idx}`} className="rounded-lg border border-[var(--stone)] bg-white/70 p-3">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2 text-sm font-bold text-zinc-900">
+                                {grid.pointType === '最高点' ? <ArrowUp size={14} className="text-amber-600" /> : <MapPin size={14} className="text-zinc-400" />}
+                                {grid.pointType}
+                                {grid.estimated ? <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] text-amber-700">估算</span> : null}
+                              </div>
+                              <div className="font-mono text-sm font-bold">{grid.temp}°C</div>
+                            </div>
+                            <div className="mt-2 flex flex-wrap gap-3 text-xs text-zinc-500">
+                              <span>风力 {grid.windScale}</span>
+                              <span>湿度 {grid.humidity}%</span>
+                              {grid.feelsLike != null ? <span>体感 {grid.feelsLike}°C</span> : null}
+                              {grid.windChill != null ? <span>风寒 {grid.windChill}°C</span> : null}
+                              {grid.uvLevel ? <span>紫外线 {grid.uvLevel}</span> : null}
+                            </div>
+                            {grid.note ? <p className="mt-2 text-[11px] leading-5 text-amber-700">{grid.note}</p> : null}
+                          </div>
+                        )) : (
+                          <EmptyModule icon={MapPin} title="暂无估算节点天气" description="后端没有返回起点、最高点或终点海拔数据，请检查轨迹文件。" />
+                        )}
+                      </div>
                     </div>
                   </div>
-                </Card>
-              ))}
-              {plan.scenicSpots.length === 0 && (
-                <div className="col-span-full p-6 border-2 border-dashed border-[var(--stone)] rounded-2xl flex flex-col items-center justify-center text-zinc-400 gap-2">
-                  <MapPin size={24} />
-                  <span className="text-xs font-medium">沿途风光等待探索...</span>
-                </div>
+                  {hourlyWeather.length > 0 ? (
+                    <div>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <div className="text-xs font-bold uppercase tracking-widest text-zinc-400">出行日白天逐小时</div>
+                        <div className="text-xs text-zinc-400">06:00-20:00</div>
+                      </div>
+                      <div className="h-[220px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={hourlyWeather.map(h => ({
+                            ...h,
+                            time: h.fxTime.includes('T') ? h.fxTime.split('T')[1]?.substring(0, 5) || h.fxTime : h.fxTime,
+                          }))}>
+                            <defs>
+                              <linearGradient id="colorTempInline" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="5%" stopColor="#2563eb" stopOpacity={0.16} />
+                                <stop offset="95%" stopColor="#2563eb" stopOpacity={0} />
+                              </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#eeeeee" />
+                            <XAxis dataKey="time" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: '#71717a' }} interval="preserveStartEnd" />
+                            <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
+                            <Tooltip formatter={(value: number) => [`${value}°C`, '温度']} />
+                            <Area type="monotone" dataKey="temp" stroke="#2563eb" strokeWidth={2.5} fill="url(#colorTempInline)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                  ) : (
+                    <EmptyModule icon={Clock} title="暂无出行日白天逐小时预报" description="当前 24 小时预报未覆盖出行日 06:00-20:00，系统不使用凌晨或其他日期数据替代。" />
+                  )}
+                </>
+              ) : (
+                <EmptyModule
+                  icon={CloudSun}
+                  title="天气数据未启用"
+                  description="填写出行日期并配置和风天气 Key 后，系统会展示天气、体感、风寒和关键点估算。"
+                />
               )}
-            </div>
+            </Card>
+          </section>
+
+          {/* 4. 出行攻略 */}
+          <section id="section-guide" className="scroll-mt-32 lg:scroll-mt-24">
+            <SectionTitle title="出行攻略" icon={ClipboardCheck} colorClass="text-[var(--forest)]" />
+            <Card>
+              <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <h3 className="text-sm font-bold uppercase tracking-widest text-zinc-400">沿途风光与网络洞察</h3>
+                  {webSummary ? <p className="mt-2 text-sm leading-7 text-zinc-700">{webSummary}</p> : null}
+                </div>
+                {webReferences.length > 0 ? (
+                  <span className="shrink-0 rounded-full bg-[var(--forest)]/10 px-3 py-1 text-xs font-bold text-[var(--forest)]">
+                    {webReferences.length} 条来源
+                  </span>
+                ) : null}
+              </div>
+              {webSummary || webReferences.length > 0 ? (
+                webReferences.length > 0 ? (
+                  <ul className="grid gap-3 md:grid-cols-2">
+                    {webReferences.map((item) => (
+                      <li key={item.url} className="rounded-xl border border-[var(--stone)] p-3">
+                        <a href={item.url} target="_blank" rel="noreferrer" className="text-sm font-bold text-zinc-900 hover:text-[var(--forest)] break-all">
+                          {item.title}
+                        </a>
+                        {item.source ? <div className="mt-0.5 text-xs text-zinc-400">{item.source}</div> : null}
+                        {item.snippet ? <p className="mt-1 text-xs leading-5 text-zinc-500">{item.snippet}</p> : null}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null
+              ) : (
+                <EmptyModule icon={List} title="暂无网络洞察" description="未配置搜索或 AI key 时，此处不会编造沿途风光和攻略信息。" />
+              )}
+            </Card>
           </section>
 
           {/* 4. 交通方案 */}
@@ -401,10 +591,7 @@ const ReportDetailPage: React.FC = () => {
                   </Card>
                 )}
                 {plan.transportScheme.outbound?.driving && (
-                  <Card className={cn(
-                    'p-4 border-l-4',
-                    plan.transportScheme.recommendedMode === '驾车' ? 'border-l-amber-500 bg-amber-50/50' : 'border-l-[var(--stone)]'
-                  )}>
+                  <Card className="p-4 border-l-4 border-l-amber-500 bg-amber-50/50">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-3">
                         <div className="p-2 bg-amber-100 rounded-lg">
@@ -415,9 +602,6 @@ const ReportDetailPage: React.FC = () => {
                           <p className="text-xs text-zinc-500">自驾前往</p>
                         </div>
                       </div>
-                      {plan.transportScheme.recommendedMode === '驾车' && (
-                        <span className="px-2 py-1 bg-amber-500 text-white text-xs font-bold rounded-full">推荐</span>
-                      )}
                     </div>
                     <div className="grid grid-cols-3 gap-4 text-center">
                       <div>
@@ -431,6 +615,72 @@ const ReportDetailPage: React.FC = () => {
                       <div>
                         <div className="text-lg font-bold text-zinc-900">{plan.transportScheme.outbound.driving.tollsYuan}元</div>
                         <div className="text-xs text-zinc-500">过路费</div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+                {(plan.transportScheme.transitRoutes?.length || plan.transportScheme.outbound?.transit) ? (
+                  <Card className="p-4 border-l-4 border-l-sky-500 bg-sky-50/50">
+                    <div className="mb-4 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className="rounded-lg bg-sky-100 p-2">
+                          <MapIcon size={20} className="text-sky-700" />
+                        </div>
+                        <div>
+                          <h3 className="font-bold text-zinc-900">公共交通</h3>
+                          <p className="text-xs text-zinc-500">含地铁/公交换乘方案</p>
+                        </div>
+                      </div>
+                      <div className="text-right text-xs text-zinc-500">
+                        {(plan.transportScheme.transitRoutes || [plan.transportScheme.outbound.transit]).filter(Boolean).length} 个方案
+                      </div>
+                    </div>
+                    <div className="space-y-3">
+                      {(plan.transportScheme.transitRoutes || [plan.transportScheme.outbound.transit]).filter(Boolean).slice(0, 3).map((route, routeIdx) => route ? (
+                        <div key={routeIdx} className="rounded-xl border border-sky-100 bg-white p-3">
+                          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                            <div className="text-sm font-bold text-zinc-900">方案 {routeIdx + 1}</div>
+                            <div className="flex gap-3 text-xs text-zinc-500">
+                              <span>{route.distanceKm.toFixed(1)}km</span>
+                              <span>{route.durationMin}分钟</span>
+                              <span>{route.costYuan}元</span>
+                              <span>步行 {route.walkingDistance}m</span>
+                            </div>
+                          </div>
+                          {route.segments && route.segments.length > 0 ? (
+                            <div className="space-y-2">
+                              {route.segments.map((segment, segIdx) => (
+                                <div key={`${segment.lineName}-${segIdx}`} className="flex items-start gap-2 text-xs leading-5 text-zinc-600">
+                                  <span className={cn(
+                                    'mt-0.5 shrink-0 rounded-full px-2 py-0.5 font-bold',
+                                    segment.type === 'subway' ? 'bg-emerald-100 text-emerald-700' : 'bg-sky-100 text-sky-700'
+                                  )}>
+                                    {segment.type === 'subway' ? '地铁' : '公交'}
+                                  </span>
+                                  <span>
+                                    <strong className="text-zinc-900">{segment.lineName}</strong>
+                                    {' '}从 {segment.departureStop || '上车站'} 到 {segment.arrivalStop || '下车站'}
+                                    {' '}· {segment.durationMin}分钟 · {(segment.distanceM / 1000).toFixed(1)}km
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-xs text-zinc-500">地图接口未返回逐段换乘详情，请以高德地图复核。</div>
+                          )}
+                        </div>
+                      ) : null)}
+                    </div>
+                  </Card>
+                ) : (
+                  <Card className="p-4 border-l-4 border-l-zinc-300">
+                    <div className="flex items-center gap-3">
+                      <div className="rounded-lg bg-zinc-100 p-2">
+                        <MapIcon size={20} className="text-zinc-500" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-zinc-900">公共交通</h3>
+                        <p className="text-xs text-zinc-500">地图接口未返回可用公交/地铁方案。</p>
                       </div>
                     </div>
                   </Card>
@@ -457,37 +707,47 @@ const ReportDetailPage: React.FC = () => {
                     </div>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {plan.riskFactors.map((factor, idx) => (
-                      <span key={idx} className="px-2 py-1 bg-white text-rose-600 text-[10px] font-black uppercase tracking-tighter rounded border border-rose-200">
-                        {factor}
+                    {riskFactors.length > 0 ? (
+                      riskFactors.map((factor, idx) => (
+                        <span key={idx} className="px-2 py-1 bg-white text-rose-600 text-[10px] font-black uppercase tracking-tighter rounded border border-rose-200">
+                          {factor}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="px-2 py-1 bg-white text-rose-600 text-[10px] font-black uppercase tracking-tighter rounded border border-rose-200">
+                        待补充
                       </span>
-                    ))}
+                    )}
                   </div>
                 </div>
                 <div className="space-y-4">
                   <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest">具体安全隐患</h3>
                   <div className="grid grid-cols-1 gap-4">
-                    {plan.safetyIssues.map((issue: SafetyIssue, idx: number) => (
-                      <div key={idx} className="p-4 border border-[var(--stone)] rounded-xl hover:border-zinc-200 transition-colors">
-                        <div className="flex items-center justify-between mb-2">
-                          <div className="font-bold text-sm flex items-center gap-2">
-                            <div className={cn(
-                              'w-2 h-2 rounded-full',
-                              issue.severity === '高' ? 'bg-rose-500' : issue.severity === '中' ? 'bg-amber-500' : 'bg-[var(--forest)]'
-                            )} />
-                            {issue.type}
+                    {safetyIssues.length > 0 ? (
+                      safetyIssues.map((issue: SafetyIssue, idx: number) => (
+                        <div key={idx} className="p-4 border border-[var(--stone)] rounded-xl hover:border-zinc-200 transition-colors">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="font-bold text-sm flex items-center gap-2">
+                              <div className={cn(
+                                'w-2 h-2 rounded-full',
+                                issue.severity === '高' ? 'bg-rose-500' : issue.severity === '中' ? 'bg-amber-500' : 'bg-[var(--forest)]'
+                              )} />
+                              {issue.type}
+                            </div>
+                            <Badge variant={issue.severity === '高' ? 'error' : issue.severity === '中' ? 'warning' : 'success'}>
+                              严重程度: {issue.severity}
+                            </Badge>
                           </div>
-                          <Badge variant={issue.severity === '高' ? 'error' : issue.severity === '中' ? 'warning' : 'success'}>
-                            严重程度: {issue.severity}
-                          </Badge>
+                          <p className="text-xs text-zinc-600 mb-3 leading-relaxed">{issue.description}</p>
+                          <div className="flex items-start gap-2 p-2 bg-[var(--sand)] rounded-lg text-xs text-zinc-500 italic">
+                            <Info size={14} className="mt-0.5 flex-shrink-0" />
+                            <span>缓解措施: {issue.mitigation}</span>
+                          </div>
                         </div>
-                        <p className="text-xs text-zinc-600 mb-3 leading-relaxed">{issue.description}</p>
-                        <div className="flex items-start gap-2 p-2 bg-[var(--sand)] rounded-lg text-xs text-zinc-500 italic">
-                          <Info size={14} className="mt-0.5 flex-shrink-0" />
-                          <span>缓解措施: {issue.mitigation}</span>
-                        </div>
-                      </div>
-                    ))}
+                      ))
+                    ) : (
+                      <EmptyModule icon={ShieldAlert} title="暂无安全隐患清单" description="当前报告没有返回结构化安全隐患，建议按轨迹海拔、路况、天气和撤退点人工复核。" />
+                    )}
                   </div>
                 </div>
               </Card>
@@ -497,204 +757,53 @@ const ReportDetailPage: React.FC = () => {
                   <h3 className="font-bold">应急救援联络</h3>
                 </div>
                 <div className="space-y-4">
-                  {plan.emergencyRescueContacts.map((contact, idx) => (
-                    <div key={idx} className="p-4 bg-white/5 rounded-xl border border-white/10">
-                      <div className="text-xs text-zinc-400 mb-1">{contact.name}</div>
-                      <div className="text-lg font-mono font-bold text-white tracking-wider">{contact.phone}</div>
+                  {rescueContacts.length > 0 ? (
+                    rescueContacts.map((contact, idx) => (
+                      <div key={idx} className="p-4 bg-white/5 rounded-xl border border-white/10">
+                        <div className="text-xs text-zinc-400 mb-1">{contact.name}</div>
+                        <div className="text-lg font-mono font-bold text-white tracking-wider">{contact.phone}</div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-4 bg-white/5 rounded-xl border border-white/10">
+                      <div className="text-xs text-zinc-400 mb-1">通用紧急电话</div>
+                      <div className="text-lg font-mono font-bold text-white tracking-wider">110 / 120 / 119</div>
                     </div>
-                  ))}
+                  )}
                 </div>
               </Card>
             </div>
-          </section>
-
-          {/* 6. 天气预报 */}
-          <section id="section-weather" className="scroll-mt-32 lg:scroll-mt-24">
-            <SectionTitle title="动态天气看板" icon={CloudSun} colorClass="text-blue-600" />
-            <Card className="p-0 overflow-hidden">
-              <div className="flex border-b border-[var(--stone)]">
-                <button
-                  onClick={() => setWeatherTab('overview')}
-                  className={cn(
-                    'flex-1 py-4 text-sm font-bold transition-colors',
-                    weatherTab === 'overview' ? 'bg-[var(--sand)] text-zinc-900 border-b-2 border-[var(--forest)]' : 'text-zinc-400 hover:text-zinc-600'
-                  )}
-                >
-                  详情与格点
-                </button>
-                <button
-                  onClick={() => setWeatherTab('hourly')}
-                  className={cn(
-                    'flex-1 py-4 text-sm font-bold transition-colors',
-                    weatherTab === 'hourly' ? 'bg-[var(--sand)] text-zinc-900 border-b-2 border-[var(--forest)]' : 'text-zinc-400 hover:text-zinc-600'
-                  )}
-                >
-                  逐小时预报
-                </button>
-              </div>
-              <div className="p-6">
-                <AnimatePresence mode="wait">
-                  {weatherTab === 'overview' ? (
-                    <motion.div
-                      key="overview"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="grid grid-cols-1 lg:grid-cols-2 gap-8"
-                    >
-                      <div className="space-y-6">
-                        <div className="flex items-end gap-4">
-                          <div className="text-5xl font-black tracking-tighter">
-                            {plan.tripDateWeather.tempMax}°<span className="text-zinc-300">/</span>{plan.tripDateWeather.tempMin}°
-                          </div>
-                          <div className="pb-1">
-                            <div className="text-sm font-bold">{plan.tripDateWeather.textDay}</div>
-                            <div className="text-xs text-zinc-500">日期: {plan.tripDateWeather.fxDate}</div>
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-                          <div className="flex items-center gap-2 text-zinc-600">
-                            <Wind size={16} className="text-zinc-400" />
-                            <span className="text-xs font-medium">风力: {plan.tripDateWeather.windScaleDay}级</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-zinc-600">
-                            <Droplets size={16} className="text-zinc-400" />
-                            <span className="text-xs font-medium">降水: {plan.tripDateWeather.precip}mm</span>
-                          </div>
-                          {plan.tripDateWeather.uvIndex != null && (
-                            <div className="flex items-center gap-2 text-zinc-600">
-                              <Sun size={16} className="text-zinc-400" />
-                              <span className="text-xs font-medium">紫外线: {plan.tripDateWeather.uvIndex}</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                      <div className="bg-[var(--sand)] rounded-xl p-4 space-y-3">
-                        <div className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-2">关键节点格点数据</div>
-                        {plan.criticalGridWeather.map((grid, idx) => {
-                          const windSpeed = windScaleToSpeed(grid.windScale);
-                          const windChill = calculateWindChill(grid.temp, windSpeed.avg);
-                          return (
-                            <div key={idx} className={cn(
-                              'flex items-center justify-between p-3 rounded-lg border',
-                              grid.pointType === '最高点' ? 'bg-white border-amber-200 shadow-sm' : 'bg-transparent border-[var(--stone)]'
-                            )}>
-                              <div className="flex items-center gap-2">
-                                {grid.pointType === '最高点' ? <ArrowUp size={14} className="text-amber-500" /> : <MapPin size={14} className="text-zinc-400" />}
-                                <span className="text-sm font-bold">{grid.pointType}</span>
-                              </div>
-                              <div className="flex items-center gap-4 text-xs font-mono">
-                                <span className="flex items-center gap-1"><Thermometer size={12} /> {grid.temp}°C</span>
-                                <span className="flex items-center gap-1"><Wind size={12} /> {grid.windScale}</span>
-                                <span className="flex items-center gap-1"><Droplets size={12} /> {grid.humidity}%</span>
-                                {grid.pointType === '最高点' && windChill !== null && (
-                                  <span className={cn('flex items-center gap-1', getWindChillRisk(windChill)?.color)}>
-                                    <Snowflake size={12} />
-                                    体感 {windChill}°C
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </motion.div>
-                  ) : (
-                    <motion.div
-                      key="hourly"
-                      initial={{ opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -10 }}
-                      className="h-[300px] w-full"
-                    >
-                      <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={plan.hourlyWeather.map(h => {
-                          let timeLabel = '';
-                          if (h.fxTime.includes('T')) {
-                            const timePart = h.fxTime.split('T')[1];
-                            if (timePart) {
-                              timeLabel = timePart.substring(0, 5);
-                            }
-                          } else {
-                            timeLabel = h.fxTime;
-                          }
-                          return { ...h, time: timeLabel };
-                        })}>
-                          <defs>
-                            <linearGradient id="colorTemp" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1} />
-                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                            </linearGradient>
-                          </defs>
-                          <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f1f1" />
-                          <XAxis
-                            dataKey="time"
-                            axisLine={false}
-                            tickLine={false}
-                            tick={{ fontSize: 10, fill: '#94a3b8' }}
-                            interval="preserveStartEnd"
-                          />
-                          <YAxis hide domain={['dataMin - 5', 'dataMax + 5']} />
-                          <Tooltip
-                            contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)' }}
-                            labelStyle={{ fontWeight: 'bold', marginBottom: '4px' }}
-                            formatter={(value: number) => [`${value}°C`, '温度']}
-                          />
-                          <Area
-                            type="monotone"
-                            dataKey="temp"
-                            stroke="#3b82f6"
-                            strokeWidth={3}
-                            fillOpacity={1}
-                            fill="url(#colorTemp)"
-                            name="温度"
-                          />
-                        </AreaChart>
-                      </ResponsiveContainer>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
-            </Card>
           </section>
 
           {/* 7. 装备建议 */}
           <section id="section-equipment" className="scroll-mt-32 lg:scroll-mt-24">
             <SectionTitle title="行前准备" icon={Backpack} colorClass="text-[var(--earth-dark)]" />
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2">
-                <Card>
-                  <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-6">装备清单</h3>
-                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                    {plan.equipmentRecommendations.map((item: EquipmentItem, i: number) => (
-                      <div
-                        key={i}
-                        className="p-3 rounded-xl border border-[var(--stone)] hover:border-zinc-200 hover:shadow-sm transition-all group cursor-pointer"
-                      >
-                        <div className="flex items-center gap-2 mb-2">
-                          <div className="w-8 h-8 rounded-lg bg-[var(--sand)] flex items-center justify-center text-zinc-400 group-hover:bg-[var(--forest)]/10 group-hover:text-[var(--forest)] transition-colors">
-                            <CheckCircle2 size={16} />
-                          </div>
-                          <span className="text-[10px] text-zinc-400 bg-[var(--sand)] px-1.5 py-0.5 rounded">{item.category}</span>
+            <Card>
+              <h3 className="text-sm font-bold text-zinc-400 uppercase tracking-widest mb-6">装备清单</h3>
+              {equipmentRecommendations.length > 0 ? (
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                  {equipmentRecommendations.map((item: EquipmentItem, i: number) => (
+                    <div
+                      key={i}
+                      className="p-3 rounded-xl border border-[var(--stone)] hover:border-zinc-200 hover:shadow-sm transition-all group cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <div className="w-8 h-8 rounded-lg bg-[var(--sand)] flex items-center justify-center text-zinc-400 group-hover:bg-[var(--forest)]/10 group-hover:text-[var(--forest)] transition-colors">
+                          <CheckCircle2 size={16} />
                         </div>
-                        <div className="text-sm font-medium">{item.name}</div>
-                        {item.description && (
-                          <div className="text-[10px] text-zinc-400 mt-1 line-clamp-2">{item.description}</div>
-                        )}
+                        <span className="text-[10px] text-zinc-400 bg-[var(--sand)] px-1.5 py-0.5 rounded">{item.category}</span>
                       </div>
-                    ))}
-                  </div>
-                </Card>
-              </div>
-              <Card className="bg-gradient-to-br from-[var(--forest)]/5 to-[var(--forest)]/10 border-[var(--forest)]/20">
-                <h3 className="text-sm font-bold text-[var(--forest-dark)] uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Navigation size={16} /> 向导建议
-                </h3>
-                <div className="text-sm text-[var(--forest-dark)] leading-relaxed whitespace-pre-line">
-                  {plan.hikingAdvice || '暂无向导建议'}
+                      <div className="text-sm font-medium">{item.name}</div>
+                      {item.description && (
+                        <div className="text-[10px] text-zinc-400 mt-1 line-clamp-2">{item.description}</div>
+                      )}
+                    </div>
+                  ))}
                 </div>
-              </Card>
-            </div>
+              ) : (
+                <EmptyModule icon={Backpack} title="暂无装备清单" description="当前报告没有返回装备条目；建议至少携带水、补给、雨具、头灯、急救包和离线地图。" />
+              )}
+            </Card>
           </section>
         </div>
       </main>

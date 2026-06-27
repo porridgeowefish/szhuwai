@@ -7,12 +7,22 @@ Schema definitions for map routing and transportation data.
 
 from typing import Optional, List, Dict, Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from .base import Point3D
 
 
-class LocationInfo(BaseModel):
+def to_camel(value: str) -> str:
+    """snake_case 转 camelCase，用于前端 API 响应。"""
+    parts = value.split("_")
+    return parts[0] + "".join(part.title() for part in parts[1:])
+
+
+class TransportBaseModel(BaseModel):
+    model_config = ConfigDict(populate_by_name=True, alias_generator=to_camel)
+
+
+class LocationInfo(TransportBaseModel):
     """位置信息"""
     address: str = Field(..., description="地址")
     lat: Optional[float] = Field(None, description="纬度")
@@ -22,7 +32,7 @@ class LocationInfo(BaseModel):
     province: Optional[str] = Field(None, description="省份")
 
 
-class RouteSummary(BaseModel):
+class RouteSummary(TransportBaseModel):
     """路线汇总信息"""
     total_distance: Optional[str] = Field(None, description="总距离描述")
     total_time: Optional[str] = Field(None, description="总时间描述")
@@ -31,7 +41,7 @@ class RouteSummary(BaseModel):
     cheapest_mode: Optional[str] = Field(None, description="最便宜方式")
 
 
-class RouteStep(BaseModel):
+class RouteStep(TransportBaseModel):
     """路线步骤"""
     instruction: str  # 指导说明
     distance: float = Field(..., ge=0, description="距离（米）")
@@ -45,7 +55,7 @@ class RouteStep(BaseModel):
         return self.duration / 60
 
 
-class TransitSegment(BaseModel):
+class TransitSegment(TransportBaseModel):
     """公交段"""
     type: str = Field(..., description="交通类型 (subway, bus, walk)")
     line_name: str = Field(..., description="线路名称（如'地铁4号线大兴线'、'特8路'）")
@@ -58,7 +68,7 @@ class TransitSegment(BaseModel):
     operator: Optional[str] = Field(None, description="运营方")
 
 
-class TransitRoute(BaseModel):
+class TransitRoute(TransportBaseModel):
     """公交路线（简化版，仅返回核心信息）"""
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
@@ -84,14 +94,14 @@ class TransitRoute(BaseModel):
         return self.walking_distance <= 2000 and self.duration_min <= 180
 
 
-class TransitRouteDetail(BaseModel):
+class TransitRouteDetail(TransportBaseModel):
     """详细的公交路线（包含多条方案）"""
     routes: List[TransitRoute] = Field(..., description="公交路线列表，最多3条")
     taxi_cost_yuan: Optional[int] = Field(None, description="打车费用预估（元）")
     walking_distance_m: int = Field(0, description="总步行距离")
 
 
-class DrivingRoute(BaseModel):
+class DrivingRoute(TransportBaseModel):
     """驾车路线（简化版，仅返回核心信息）"""
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
@@ -107,7 +117,7 @@ class DrivingRoute(BaseModel):
         return 0
 
 
-class WalkingRoute(BaseModel):
+class WalkingRoute(TransportBaseModel):
     """步行路线（简化版，仅返回核心信息）"""
     available: bool = Field(..., description="是否有可用路线")
     duration_min: int = Field(..., ge=0, description="时长（分钟）")
@@ -119,7 +129,7 @@ class WalkingRoute(BaseModel):
         return self.distance_m <= 20000 and self.duration_min <= 300
 
 
-class TransportRoutes(BaseModel):
+class TransportRoutes(TransportBaseModel):
     """综合交通路线"""
     origin: LocationInfo = Field(..., description="起点信息")
     destination: LocationInfo = Field(..., description="终点信息")
@@ -168,7 +178,7 @@ class TransportRoutes(BaseModel):
         return modes
 
 
-class GeocodeResult(BaseModel):
+class GeocodeResult(TransportBaseModel):
     """地理编码结果"""
     address: str = Field(..., description="地址")
     province: str = Field(..., description="省份")
@@ -205,7 +215,7 @@ class GeocodeResult(BaseModel):
         )
 
 
-class POIInfo(BaseModel):
+class POIInfo(TransportBaseModel):
     """POI 信息"""
     name: str = Field(..., description="POI名称")
     type: Optional[str] = Field(None, description="POI类型")
@@ -215,14 +225,14 @@ class POIInfo(BaseModel):
     distance: Optional[float] = Field(None, description="距离中心点距离(米)")
 
 
-class RoadInfo(BaseModel):
+class RoadInfo(TransportBaseModel):
     """道路信息"""
     name: str = Field(..., description="道路名称")
     distance: Optional[float] = Field(None, description="距离中心点距离(米)")
     direction: Optional[str] = Field(None, description="道路方向")
 
 
-class ReverseGeocodeResult(BaseModel):
+class ReverseGeocodeResult(TransportBaseModel):
     """逆地理编码结果"""
     address: str = Field(..., description="地址")
     province: str = Field(..., description="省份")

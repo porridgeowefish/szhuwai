@@ -1,414 +1,102 @@
-"""
-API Configuration
-================
-
-Centralized configuration management for all API clients.
-"""
+"""外部 API 客户端配置。"""
 
 import os
-from typing import Dict
+from typing import Any, Dict
 
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
+
+# 启动即加载 .env：main.py 不会调用 load_dotenv，若不在此加载，本地运行时
+# AMAP_API_KEY 等为空 → 高德返回 INVALID_USER_KEY。必须在 from_env() 之前执行。
+# override=False：不覆盖容器/系统已注入的环境变量（Docker 场景仍以注入值为准）。
+try:  # pragma: no cover - 依赖可选，缺失时降级为读系统环境变量
+    from dotenv import load_dotenv
+
+    load_dotenv(override=False)
+except ImportError:
+    pass
 
 
 class APIConfig(BaseModel):
-    """API 配置基类"""
-    model_config = ConfigDict(
-        validate_assignment=True,
-        extra="ignore"
-    )
+    """核心策划流程使用的请求配置。"""
 
-    # API 密钥环境变量
-    WEATHER_API_KEY: str = Field(
-        default="",
-        description="和风天气API密钥"
-    )
-    MAP_API_KEY: str = Field(
-        default="",
-        description="高德地图API密钥"
-    )
-    LLM_API_KEY: str = Field(
-        default="",
-        description="大模型API密钥"
-    )
-    SEARCH_API_KEY: str = Field(
-        default="",
-        description="Tavily搜索API密钥"
-    )
+    model_config = ConfigDict(validate_assignment=True, extra="ignore")
 
-    # 统一基础配置
-    TIMEOUT: int = Field(default=10, description="请求超时时间（秒）")
-    RETRY: int = Field(default=3, description="重试次数")
-    RATE_LIMIT: int = Field(default=30, description="每分钟请求次数限制")
+    WEATHER_API_KEY: str = ""
+    WEATHER_DEVELOPER_HOST: str = "devapi"
+    MAP_API_KEY: str = ""
+    # 搜索服务商：tavily（默认，配置页即此项、有免费额度）或 jina（免费但需另申请 jina_ key、国内需代理）
+    SEARCH_PROVIDER: str = "tavily"
+    SEARCH_API_KEY: str = ""
+    LLM_API_KEY: str = ""
 
-    # 代理配置
-    PROXY: Dict[str, str] = Field(
-        default={},
-        description="代理服务器配置"
-    )
+    WEATHER_BASE_URL: str = "https://devapi.qweatherapi.com/v7"
+    MAP_BASE_URL: str = "https://restapi.amap.com/v3"
+    SEARCH_BASE_URL: str = "https://api.tavily.com"
+    LLM_BASE_URL: str = "https://api.siliconflow.cn/v1"
+    LLM_MODEL: str = "Pro/moonshotai/Kimi-K2.5"
 
-    # 缓存配置
-    CACHE_TTL: int = Field(default=3600, description="缓存有效期（秒）")
-    CACHE_MAX_SIZE: int = Field(default=1000, description="缓存最大条目数")
-
-    # API 端点
-    WEATHER_BASE_URL: str = Field(
-        default="https://devapi.qweatherapi.com/v7",
-        description="和风天气API基础URL"
-    )
-    WEATHER_DEVELOPER_HOST: str = Field(
-        default="devapi",
-        description="和风天气开发者主机"
-    )
-    MAP_BASE_URL: str = Field(
-        default="https://restapi.amap.com/v3",
-        description="高德地图API基础URL"
-    )
-    SEARCH_BASE_URL: str = Field(
-        default="https://api.tavily.com",
-        description="Tavily搜索API基础URL"
-    )
-    LLM_BASE_URL: str = Field(
-        default="https://api.siliconflow.cn/v1/chat/completions",
-        description="大模型API基础URL"
-    )
-
-    # LLM 配置
-    LLM_MODEL: str = Field(
-        default="Pro/moonshotai/Kimi-K2.5",
-        description="大模型名称"
-    )
-    LLM_TEMPERATURE: float = Field(
-        default=0.7,
-        ge=0.0,
-        le=2.0,
-        description="LLM 温度参数"
-    )
-    LLM_MAX_TOKENS: int = Field(
-        default=8192,
-        ge=1,
-        description="LLM 最大输出 token 数"
-    )
-    LLM_TIMEOUT: int = Field(
-        default=600,
-        ge=10,
-        description="LLM API 超时时间（秒）"
-    )
-
-    # Agent 配置
-    AGENT_SESSION_TTL: int = Field(
-        default=86400, ge=3600,
-        description="会话历史 TTL（秒）"
-    )
-    AGENT_MAX_HISTORY_TURNS: int = Field(
-        default=20, ge=2, le=50,
-        description="会话保留的最大对话轮数"
-    )
-    AGENT_SUMMARY_THRESHOLD: int = Field(
-        default=10, ge=4,
-        description="触发摘要压缩的对话轮数阈值"
-    )
-
-    # MySQL 配置
-    MYSQL_HOST: str = Field(
-        default="localhost",
-        description="MySQL 主机"
-    )
-    MYSQL_PORT: int = Field(
-        default=3306,
-        ge=1,
-        le=65535,
-        description="MySQL 端口"
-    )
-    MYSQL_USER: str = Field(
-        default="root",
-        description="MySQL 用户名"
-    )
-    MYSQL_PASSWORD: str = Field(
-        default="",
-        description="MySQL 密码"
-    )
-    MYSQL_DATABASE: str = Field(
-        default="outdoor_planner",
-        description="数据库名"
-    )
-    MYSQL_POOL_SIZE: int = Field(
-        default=5,
-        ge=1,
-        le=100,
-        description="连接池大小"
-    )
-
-    # MongoDB 配置
-    MONGO_HOST: str = Field(
-        default="localhost",
-        description="MongoDB 主机"
-    )
-    MONGO_PORT: int = Field(
-        default=27017,
-        ge=1,
-        le=65535,
-        description="MongoDB 端口"
-    )
-    MONGO_USER: str = Field(
-        default="",
-        description="MongoDB 用户名"
-    )
-    MONGO_PASSWORD: str = Field(
-        default="",
-        description="MongoDB 密码"
-    )
-    MONGO_DATABASE: str = Field(
-        default="outdoor_planner",
-        description="数据库名"
-    )
-
-    # Redis 配置
-    REDIS_HOST: str = Field(
-        default="localhost",
-        description="Redis 主机"
-    )
-    REDIS_PORT: int = Field(
-        default=6379,
-        ge=1,
-        le=65535,
-        description="Redis 端口"
-    )
-    REDIS_PASSWORD: str = Field(
-        default="",
-        description="Redis 密码"
-    )
-    REDIS_DB: int = Field(
-        default=0,
-        ge=0,
-        le=15,
-        description="Redis 数据库编号"
-    )
-
-    # PostgreSQL / PostGIS 配置
-    POSTGRES_HOST: str = Field(
-        default="localhost",
-        description="PostgreSQL 主机"
-    )
-    POSTGRES_PORT: int = Field(
-        default=5432,
-        ge=1,
-        le=65535,
-        description="PostgreSQL 端口"
-    )
-    POSTGRES_USER: str = Field(
-        default="outdoor_user",
-        description="PostgreSQL 用户名"
-    )
-    POSTGRES_PASSWORD: str = Field(
-        default="",
-        description="PostgreSQL 密码"
-    )
-    POSTGRES_DATABASE: str = Field(
-        default="outdoor_planner",
-        description="PostgreSQL 数据库名"
-    )
-
-    # JWT 配置
-    JWT_SECRET_KEY: str = Field(
-        default="change-me-in-production",
-        description="JWT 签名密钥"
-    )
-    JWT_ALGORITHM: str = Field(
-        default="HS256",
-        description="JWT 签名算法"
-    )
-    JWT_EXPIRE_SECONDS: int = Field(
-        default=86400,  # 24小时
-        ge=1,
-        description="Token 有效期（秒）"
-    )
-
-    # 阿里云短信配置
-    ALIYUN_ACCESS_KEY_ID: str = Field(
-        default="",
-        description="阿里云 AccessKey ID"
-    )
-    ALIYUN_ACCESS_KEY_SECRET: str = Field(
-        default="",
-        description="阿里云 AccessKey Secret"
-    )
-    SMS_SIGN_NAME: str = Field(
-        default="户外规划助手",
-        description="短信签名"
-    )
-    SMS_TEMPLATE_REGISTER: str = Field(
-        default="",
-        description="注册短信模板 ID"
-    )
-    SMS_TEMPLATE_LOGIN: str = Field(
-        default="",
-        description="登录短信模板 ID"
-    )
-    SMS_TEMPLATE_BIND: str = Field(
-        default="",
-        description="绑定手机短信模板 ID"
-    )
-    SMS_TEMPLATE_UNBIND: str = Field(
-        default="",
-        description="解绑手机短信模板 ID"
-    )
-    SMS_TEMPLATE_RESET_PASSWORD: str = Field(
-        default="",
-        description="重置密码短信模板 ID"
-    )
-    # 短信业务配置
-    SMS_CODE_LENGTH: int = Field(
-        default=6,
-        ge=4,
-        le=8,
-        description="验证码长度"
-    )
-    SMS_EXPIRE_SECONDS: int = Field(
-        default=300,  # 5分钟
-        ge=60,
-        description="验证码有效期（秒）"
-    )
-    SMS_COOLDOWN_SECONDS: int = Field(
-        default=60,  # 60秒
-        ge=10,
-        description="发送冷却时间（秒）"
-    )
-    SMS_DAILY_LIMIT: int = Field(
-        default=10,
-        ge=1,
-        description="每日发送上限"
-    )
-
-    @field_validator(
-        'TIMEOUT', 'RETRY', 'RATE_LIMIT', 'CACHE_TTL', 'CACHE_MAX_SIZE',
-        'MYSQL_POOL_SIZE', 'MONGO_PORT'
-    )
-    @classmethod
-    def validate_positive_numbers(cls, v: int) -> int:
-        """验证数值必须为正数"""
-        if v <= 0:
-            raise ValueError("配置值必须为正数")
-        return v
+    TIMEOUT: int = Field(default=10, ge=1)
+    RETRY: int = Field(default=3, ge=0, le=5)
+    RATE_LIMIT: int = Field(default=30, ge=1)
+    CACHE_TTL: int = Field(default=3600, ge=0)
+    CACHE_MAX_SIZE: int = Field(default=1000, ge=1)
+    LLM_TEMPERATURE: float = Field(default=0.3, ge=0, le=1)
+    LLM_MAX_TOKENS: int = Field(default=8192, ge=512)
+    LLM_TIMEOUT: int = Field(default=600, ge=10)
+    PROXY: Dict[str, str] = Field(default_factory=dict)
 
     def should_use_proxy(self) -> bool:
-        """判断是否需要使用代理"""
-        # 检查代理配置是否有效
-        if self.PROXY:
-            return bool(self.PROXY.get('http') or self.PROXY.get('https'))
-        return False
+        return bool(self.PROXY.get("http") or self.PROXY.get("https"))
 
     def get_headers(self, api_type: str = "default") -> Dict[str, str]:
-        """获取API请求头"""
-        base_headers = {
+        headers = {
             "Content-Type": "application/json",
-            "User-Agent": "Outdoor-Agent-Planner/1.0"
+            "User-Agent": "Outdoor-Agent-Planner/1.0",
         }
-
-        if api_type == "weather":
-            base_headers["X-QWeather-Client"] = f"OutdoorAgent/{self.WEATHER_API_KEY[:8]}"
-        elif api_type == "map":
-            base_headers["X-Amap-Key"] = self.MAP_API_KEY
-        elif api_type == "search":
-            base_headers["Authorization"] = f"Bearer {self.SEARCH_API_KEY}"
+        if api_type == "search":
+            headers["Authorization"] = f"Bearer {self.SEARCH_API_KEY}"
         elif api_type == "llm":
-            base_headers["Authorization"] = f"Bearer {self.LLM_API_KEY}"
+            headers["Authorization"] = f"Bearer {self.LLM_API_KEY}"
+        return headers
 
-        return base_headers
+    def get_cache_key(self, api_type: str, params: Dict[str, Any]) -> str:
+        import json
+
+        return f"{api_type}:{json.dumps(sorted(params.items()), ensure_ascii=False)}"
 
     @classmethod
-    def from_env(cls, env_file: str = ".env") -> "APIConfig":
-        """从环境文件加载配置
+    def from_env(cls) -> "APIConfig":
+        provider = (os.getenv("SEARCH_PROVIDER", "tavily") or "tavily").strip().lower()
 
-        加载顺序：
-        1. 优先从系统环境变量加载（Docker/云端部署方式）
-        2. 从当前目录的 .env 文件加载
-        """
-        config_data = {}
+        # 代理：国内访问 Jina 等海外搜索服务时必需。PROXY_HTTP/PROXY_HTTPS → requests 代理字典。
+        proxy: Dict[str, str] = {}
+        proxy_http = os.getenv("PROXY_HTTP", "")
+        proxy_https = os.getenv("PROXY_HTTPS", "")
+        if proxy_http:
+            proxy["http"] = proxy_http
+        if proxy_https:
+            proxy["https"] = proxy_https
 
-        # 环境变量映射
-        env_mapping = {
-            "QWEATHER_API_KEY": "WEATHER_API_KEY",
-            "AMAP_API_KEY": "MAP_API_KEY",
-            "LLM_API_KEY": "LLM_API_KEY",
-            "TAVILY_API_KEY": "SEARCH_API_KEY",
-            "WEATHER_DEVELOPER_HOST": "WEATHER_DEVELOPER_HOST",
-            # MySQL 环境变量
-            "MYSQL_HOST": "MYSQL_HOST",
-            "MYSQL_PORT": "MYSQL_PORT",
-            "MYSQL_USER": "MYSQL_USER",
-            "MYSQL_PASSWORD": "MYSQL_PASSWORD",
-            "MYSQL_DATABASE": "MYSQL_DATABASE",
-            "MYSQL_POOL_SIZE": "MYSQL_POOL_SIZE",
-            # MongoDB 环境变量
-            "MONGO_HOST": "MONGO_HOST",
-            "MONGO_PORT": "MONGO_PORT",
-            "MONGO_USER": "MONGO_USER",
-            "MONGO_PASSWORD": "MONGO_PASSWORD",
-            "MONGO_DATABASE": "MONGO_DATABASE",
-            # Redis 环境变量
-            "REDIS_HOST": "REDIS_HOST",
-            "REDIS_PORT": "REDIS_PORT",
-            "REDIS_PASSWORD": "REDIS_PASSWORD",
-            "REDIS_DB": "REDIS_DB",
-            # PostgreSQL 环境变量
-            "POSTGRES_HOST": "POSTGRES_HOST",
-            "POSTGRES_PORT": "POSTGRES_PORT",
-            "POSTGRES_USER": "POSTGRES_USER",
-            "POSTGRES_PASSWORD": "POSTGRES_PASSWORD",
-            "POSTGRES_DATABASE": "POSTGRES_DATABASE",
-            # 阿里云短信环境变量
-            "ALIYUN_ACCESS_KEY_ID": "ALIYUN_ACCESS_KEY_ID",
-            "ALIYUN_ACCESS_KEY_SECRET": "ALIYUN_ACCESS_KEY_SECRET",
-            "SMS_SIGN_NAME": "SMS_SIGN_NAME",
-            "SMS_TEMPLATE_REGISTER": "SMS_TEMPLATE_REGISTER",
-            "SMS_TEMPLATE_LOGIN": "SMS_TEMPLATE_LOGIN",
-            "SMS_TEMPLATE_BIND": "SMS_TEMPLATE_BIND",
-            "SMS_TEMPLATE_UNBIND": "SMS_TEMPLATE_UNBIND",
-            "SMS_TEMPLATE_RESET_PASSWORD": "SMS_TEMPLATE_RESET_PASSWORD",
-        }
+        # 搜索 key 按服务商取对应变量，避免把 Tavily 的 key 误当作 Jina key 发出去。
+        search_key = os.getenv("SEARCH_API_KEY", "")
+        if not search_key:
+            search_key = (
+                os.getenv("TAVILY_API_KEY", "")
+                if provider == "tavily"
+                else os.getenv("JINA_API_KEY", "")
+            )
 
-        # 1. 从系统环境变量加载
-        for env_var, config_key in env_mapping.items():
-            env_value = os.getenv(env_var)
-            if env_value:
-                config_data[config_key] = env_value
-
-        # 2. 从 .env 文件加载
-        if os.path.exists(env_file):
-            with open(env_file, 'r', encoding='utf-8') as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
-                        key, value = line.split('=', 1)
-                        key = key.strip()
-                        value = value.strip()
-                        # 处理环境变量映射
-                        if key in env_mapping:
-                            if env_mapping[key] not in config_data:
-                                config_data[env_mapping[key]] = value
-                        elif key == 'PROXY_HTTP':
-                            if 'PROXY' not in config_data:
-                                config_data['PROXY'] = {}
-                            config_data['PROXY']['http'] = value
-                        elif key == 'PROXY_HTTPS':
-                            if 'PROXY' not in config_data:
-                                config_data['PROXY'] = {}
-                            config_data['PROXY']['https'] = value
-                        elif key in cls.model_fields and key not in config_data:
-                            config_data[key] = value
-
-        return cls(**config_data)
-
-    def get_cache_key(self, api_type: str, params: Dict) -> str:
-        """生成缓存键"""
-        import json
-        key_data = {
-            "api_type": api_type,
-            "params": sorted(params.items())
-        }
-        return f"{api_type}:{json.dumps(key_data, sort_keys=True)}"
+        return cls(
+            WEATHER_API_KEY=os.getenv("QWEATHER_API_KEY", ""),
+            WEATHER_DEVELOPER_HOST=os.getenv("WEATHER_DEVELOPER_HOST", "devapi"),
+            MAP_API_KEY=os.getenv("AMAP_API_KEY", ""),
+            SEARCH_PROVIDER=provider,
+            SEARCH_API_KEY=search_key,
+            LLM_API_KEY=os.getenv("LLM_API_KEY", ""),
+            LLM_BASE_URL=os.getenv("LLM_BASE_URL", "https://api.siliconflow.cn/v1"),
+            LLM_MODEL=os.getenv("LLM_MODEL", "Pro/moonshotai/Kimi-K2.5"),
+            PROXY=proxy,
+        )
 
 
-# 全局配置实例
 api_config = APIConfig.from_env()

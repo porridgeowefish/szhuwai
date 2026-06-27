@@ -14,7 +14,6 @@ import { cn } from '../utils/cn';
 interface RouteBriefProps {
   planName: string;
   trackDetail?: TrackDetailAnalysis;
-  overallRating?: '推荐' | '谨慎推荐' | '不推荐';
 }
 
 /**
@@ -23,8 +22,7 @@ interface RouteBriefProps {
  */
 export const RouteBrief: React.FC<RouteBriefProps> = ({
   planName,
-  trackDetail,
-  overallRating
+  trackDetail
 }) => {
   if (!trackDetail) {
     return (
@@ -42,38 +40,24 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
     parts.push(`「${planName}」`);
 
     // 距离和爬升
-    if (trackDetail.total_distance_km) {
-      parts.push(`全长${trackDetail.total_distance_km.toFixed(1)}km`);
+    if (trackDetail.totalDistanceKm) {
+      parts.push(`全长${trackDetail.totalDistanceKm.toFixed(1)}km`);
     }
-    if (trackDetail.total_ascent_m) {
-      parts.push(`累计爬升${trackDetail.total_ascent_m.toFixed(0)}m`);
+    if (trackDetail.totalAscentM) {
+      parts.push(`累计爬升${trackDetail.totalAscentM.toFixed(0)}m`);
     }
 
     // 难度
-    if (trackDetail.difficulty_level) {
-      parts.push(`难度${trackDetail.difficulty_level}`);
+    if (trackDetail.difficultyLevel) {
+      parts.push(`难度${trackDetail.difficultyLevel}`);
     }
 
     // 预计时长
-    if (trackDetail.estimated_duration_hours) {
-      parts.push(`预计${trackDetail.estimated_duration_hours.toFixed(1)}小时`);
+    if (trackDetail.estimatedDurationHours) {
+      parts.push(`预计${trackDetail.estimatedDurationHours.toFixed(1)}小时`);
     }
 
     return parts.join('，') + '。';
-  };
-
-  // 获取评级颜色
-  const getRatingColor = () => {
-    switch (overallRating) {
-      case '推荐':
-        return 'bg-[var(--forest)] text-white';
-      case '谨慎推荐':
-        return 'bg-amber-500 text-white';
-      case '不推荐':
-        return 'bg-red-500 text-white';
-      default:
-        return 'bg-zinc-100 text-zinc-600';
-    }
   };
 
   // 获取难度颜色
@@ -110,11 +94,6 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
               <h2 className="text-2xl font-bold text-zinc-900" style={{ fontFamily: 'Playfair Display, serif' }}>
                 {planName}
               </h2>
-              {overallRating && (
-                <span className={cn('px-3 py-1 rounded-full text-xs font-bold', getRatingColor())}>
-                  {overallRating}
-                </span>
-              )}
             </div>
             <p className="text-sm text-zinc-600 leading-relaxed">{generateBrief()}</p>
           </div>
@@ -129,7 +108,7 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
               总里程
             </div>
             <div className="text-xl font-bold text-zinc-900">
-              {trackDetail.total_distance_km.toFixed(1)}
+              {trackDetail.totalDistanceKm.toFixed(1)}
               <span className="text-sm font-normal text-zinc-500 ml-1">km</span>
             </div>
           </div>
@@ -141,7 +120,7 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
               累计爬升
             </div>
             <div className="text-xl font-bold text-zinc-900">
-              {trackDetail.total_ascent_m.toFixed(0)}
+              {trackDetail.totalAscentM.toFixed(0)}
               <span className="text-sm font-normal text-zinc-500 ml-1">m</span>
             </div>
           </div>
@@ -153,7 +132,7 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
               预计时长
             </div>
             <div className="text-xl font-bold text-zinc-900">
-              {trackDetail.estimated_duration_hours.toFixed(1)}
+              {trackDetail.estimatedDurationHours.toFixed(1)}
               <span className="text-sm font-normal text-zinc-500 ml-1">h</span>
             </div>
           </div>
@@ -164,8 +143,8 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
               <Gauge size={12} className="text-[var(--earth)]" />
               难度等级
             </div>
-            <div className={cn('inline-flex px-2 py-0.5 rounded-full text-sm font-bold', getDifficultyColor(trackDetail.difficulty_level))}>
-              {trackDetail.difficulty_level}
+            <div className={cn('inline-flex px-2 py-0.5 rounded-full text-sm font-bold', getDifficultyColor(trackDetail.difficultyLevel))}>
+              {trackDetail.difficultyLevel}
             </div>
           </div>
         </div>
@@ -174,15 +153,15 @@ export const RouteBrief: React.FC<RouteBriefProps> = ({
         <div className="flex flex-wrap gap-4 mt-4 pt-4 border-t border-[var(--stone)]">
           <div className="flex items-center gap-2 text-sm text-zinc-600">
             <TrendingUp size={14} className="text-red-400" />
-            <span>最高点 <strong className="text-zinc-800">{trackDetail.max_elevation_m}m</strong></span>
+            <span>最高点 <strong className="text-zinc-800">{trackDetail.maxElevationM}m</strong></span>
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-600">
             <Target size={14} className="text-blue-400" />
-            <span>最低点 <strong className="text-zinc-800">{trackDetail.min_elevation_m}m</strong></span>
+            <span>最低点 <strong className="text-zinc-800">{trackDetail.minElevationM}m</strong></span>
           </div>
           <div className="flex items-center gap-2 text-sm text-zinc-600">
             <Flag size={14} className="text-[var(--forest)]" />
-            <span>平均海拔 <strong className="text-zinc-800">{trackDetail.avg_elevation_m}m</strong></span>
+            <span>平均海拔 <strong className="text-zinc-800">{trackDetail.avgElevationM}m</strong></span>
           </div>
         </div>
       </div>
