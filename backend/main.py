@@ -19,6 +19,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from src.api.routes import (
     location_router,
     plan_router,
+    runtime_router,
     two_bulu_router,
 )
 from src.services.two_bulu_browser_service import session_manager
@@ -65,6 +66,7 @@ app.add_middleware(
 # ============ 注册模块化路由 ============
 app.include_router(plan_router, prefix=f"/api/{API_VERSION}")
 app.include_router(location_router, prefix=f"/api/{API_VERSION}")
+app.include_router(runtime_router, prefix=f"/api/{API_VERSION}")
 app.include_router(two_bulu_router, prefix=f"/api/{API_VERSION}")
 
 

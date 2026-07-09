@@ -7,6 +7,7 @@
 
 import json
 import re
+import unicodedata
 from typing import List
 
 import requests
@@ -16,6 +17,25 @@ from loguru import logger
 from src.schemas.output import WebReference
 from src.schemas.search import SearchEmergencyContact, WebSearchInsight, WebSearchResponse
 from src.api.search_client import SearchClient
+
+
+ROUTE_GENERIC_WORDS = (
+    "徒步", "登山", "爬山", "夜爬", "攻略", "路线", "线路", "穿越", "正穿", "反穿",
+    "环线", "环穿", "户外", "露营", "景点", "景区", "旅游", "注意事项", "装备",
+)
+ROUTE_GENERIC_CHARS = set("山线线路步爬登走游穿正反夜攻略户外")
+
+NOISE_KEYWORDS = (
+    "please login", "before leaving comments", "热门分类", "相关视频", "相关 trip",
+    "trip moments", "vote-icon", "vip_icon", "high-quality-icon", "粉丝", "获赞",
+    "原声", "vlog", "法律人物", "时尚杂志", "职场政策", "插画设计", "棋牌名家",
+    "网络视频", "初等教育", "西医时尚产品", "评论", "登录", "follow", "share",
+)
+
+TRADITIONAL_CHARS = set(
+    "黃連龍巖閩眾長歲遺雲隱與處門絕貼關樹蔭癒闖廣場體驗"
+    "臺灣國風氣畫書職視頻醫類熱請錄讚點擊"
+)
 
 
 class SearchService:
@@ -55,6 +75,7 @@ class SearchService:
                 logger.info(f"执行搜索查询: {query}")
                 result = self.client.search(query, max_results=max_results)
                 if result and isinstance(result, WebSearchResponse):
+                    result = self._filter_response_by_route(keywords, result)
                     all_results.append(result)
             except Exception as e:
                 logger.error(f"搜索失败 [{query}]: {e}")
@@ -89,10 +110,15 @@ class SearchService:
         与 synthesize_insight 的区别：输入是 WebReference（标题+摘要）而非完整搜索响应，
         且不携带高德景观线索（减少噪音）。LLM 不可用/失败时用参考摘要简单拼接降级。
         """
+        references = [
+            ref for ref in references
+            if self._is_route_relevant(keywords, f"{ref.title} {ref.snippet}")
+        ]
         materials = self._format_references(references)
         insight = self._llm_synthesize(keywords, materials, [])
         if not insight.summary:
-            snippets = [r.snippet for r in references[:3] if r.snippet]
+            snippets = [self._clean_web_text(r.snippet) for r in references[:3] if r.snippet]
+            snippets = [s for s in snippets if s]
             insight = WebSearchInsight(summary="；".join(snippets))
         return insight
 
@@ -201,6 +227,7 @@ class SearchService:
         for response in responses:
             for result in response.results:
                 text = " ".join(part for part in [result.title, result.content] if part)
+                text = self._clean_web_text(text)
                 if text and len(snippets) < 3:
                     snippets.append(text[:80])
                 for phone in self._extract_phone_numbers(text):
@@ -226,7 +253,7 @@ class SearchService:
         for response in responses:
             for result in response.results[:4]:
                 text = result.content or result.raw_content or ""
-                text = " ".join(text.split())[:400]
+                text = self._clean_web_text(text)[:400]
                 if not text:
                     continue
                 lines.append(f"{index}. {result.title}（{result.source}）：{text}")
@@ -240,11 +267,111 @@ class SearchService:
         """把前端回传的网络参考资料格式化为 LLM 材料字符串。"""
         lines: list[str] = []
         for i, ref in enumerate(references[:8], 1):
-            text = " ".join((ref.snippet or "").split())[:400]
+            title = SearchService._clean_web_text(ref.title)
+            text = SearchService._clean_web_text(ref.snippet or "")[:400]
             if not text:
                 continue
-            lines.append(f"{i}. {ref.title}（{ref.source}）：{text}")
+            lines.append(f"{i}. {title or ref.source}（{ref.source}）：{text}")
         return "\n".join(lines)
+
+    @classmethod
+    def _filter_response_by_route(
+        cls,
+        keywords: str,
+        response: WebSearchResponse,
+    ) -> WebSearchResponse:
+        """搜索 API 返回后先按线路名硬过滤，并清洗正文噪音。"""
+        filtered = []
+        for result in response.results:
+            haystack = f"{result.title} {result.content} {result.raw_content or ''}"
+            if not cls._is_route_relevant(keywords, haystack):
+                continue
+            cleaned_content = cls._clean_web_text(result.content)
+            cleaned_raw = cls._clean_web_text(result.raw_content or "")
+            if not cleaned_content and not cleaned_raw:
+                continue
+            filtered.append(
+                result.model_copy(update={
+                    "title": cls._clean_web_text(result.title) or result.title,
+                    "content": cleaned_content or cleaned_raw[:1000],
+                    "raw_content": cleaned_raw or None,
+                })
+            )
+        return response.model_copy(update={
+            "results": filtered,
+            "total_results": len(filtered),
+        })
+
+    @classmethod
+    def _is_route_relevant(cls, route_name: str, text: str) -> bool:
+        """判断搜索结果是否至少命中线路名称中的有效部分。"""
+        route_tokens = cls._route_tokens(route_name)
+        if not route_tokens:
+            return True
+        haystack = cls._normalize_match_text(text)
+        if any(token in haystack for token in route_tokens):
+            return True
+
+        route_chars = {ch for ch in "".join(route_tokens) if ch not in ROUTE_GENERIC_CHARS}
+        if not route_chars:
+            return False
+        overlap = sum(1 for ch in route_chars if ch in haystack)
+        return overlap >= min(2, len(route_chars))
+
+    @staticmethod
+    def _route_tokens(route_name: str) -> list[str]:
+        text = SearchService._normalize_match_text(route_name)
+        for word in ROUTE_GENERIC_WORDS:
+            text = text.replace(word, " ")
+        tokens = [token for token in re.findall(r"[\u4e00-\u9fff]{2,}", text) if token]
+        return [token for token in tokens if set(token) - ROUTE_GENERIC_CHARS]
+
+    @staticmethod
+    def _normalize_match_text(text: str) -> str:
+        text = unicodedata.normalize("NFKC", text or "")
+        return re.sub(r"\s+", "", text)
+
+    @classmethod
+    def _clean_web_text(cls, text: str) -> str:
+        """清理平台噪音，避免 LLM 被 @/#/英文/emoji/繁体旅行站内容污染。"""
+        if not text:
+            return ""
+        text = unicodedata.normalize("NFKC", text)
+        text = re.sub(r"[@＠][^\s，。；！？,.!?;:：、]+", " ", text)
+        text = re.sub(r"[#＃][^\s#＃，。；！？,.!?;:：、]+", " ", text)
+        text = cls._remove_emoji(text)
+        text = re.sub(r"[A-Za-z][A-Za-z0-9_.\\/-]*", " ", text)
+        text = re.sub(r"\[[^\]]*\]", " ", text)
+
+        fragments = re.split(r"(?:\s*#{2,}\s*)|[。！？；;\n\r]+", text)
+        cleaned: list[str] = []
+        for fragment in fragments:
+            fragment = " ".join(fragment.split()).strip(" ，、:：.-")
+            if not fragment:
+                continue
+            lower = fragment.lower()
+            if any(keyword in lower for keyword in NOISE_KEYWORDS):
+                continue
+            if any(ch in TRADITIONAL_CHARS for ch in fragment):
+                continue
+            fragment = re.sub(r"(?<![\d.])\d{5,}(?![\d.])", " ", fragment)
+            fragment = re.sub(r"\s+", " ", fragment).strip(" ，、:：.-")
+            if fragment:
+                cleaned.append(fragment)
+
+        deduped = list(dict.fromkeys(cleaned))
+        return "；".join(deduped)
+
+    @staticmethod
+    def _remove_emoji(text: str) -> str:
+        chars: list[str] = []
+        for ch in text:
+            code = ord(ch)
+            category = unicodedata.category(ch)
+            if category in {"So", "Sk"} or code == 0xFE0F or 0x1F000 <= code <= 0x1FAFF:
+                continue
+            chars.append(ch)
+        return "".join(chars)
 
     @staticmethod
     def _clean_term(text: str) -> str:

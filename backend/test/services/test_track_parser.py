@@ -254,6 +254,38 @@ class TestTrackParser:
         distance2 = parser._haversine_distance(39.9042, 116.4074, 39.9042, 116.4074)
         assert distance2 < 0.01
 
+    def test_coordinate_outlier_filter_removes_isolated_gps_drift(self, parser: TrackParser) -> None:
+        """坐标跳点应在分析前被剔除，避免总里程和平面图出现大三角。"""
+        points = [
+            Point3D(lat=39.9042, lon=116.4074, elevation=100),
+            Point3D(lat=39.9043, lon=116.4075, elevation=105),
+            Point3D(lat=39.9600, lon=116.4800, elevation=110),  # 明显漂移点
+            Point3D(lat=39.9044, lon=116.4076, elevation=108),
+            Point3D(lat=39.9045, lon=116.4077, elevation=112),
+        ]
+
+        filtered = parser._filter_coordinate_outliers(points)
+        result = parser._analyze_points(filtered, "漂移测试")
+
+        assert len(filtered) == 4
+        assert all(point.lat < 39.91 for point in filtered)
+        assert result.track_points_count == 4
+        assert result.total_distance_km < 0.1
+        assert all(point.lat < 39.91 for point in result.track_points_gcj02)
+
+    def test_coordinate_outlier_filter_keeps_sparse_legitimate_segments(self, parser: TrackParser) -> None:
+        """真实稀疏采样的长线段不应被当成漂移点删除。"""
+        points = [
+            Point3D(lat=39.9042, lon=116.4074, elevation=100),
+            Point3D(lat=39.9100, lon=116.4140, elevation=130),
+            Point3D(lat=39.9160, lon=116.4210, elevation=160),
+            Point3D(lat=39.9220, lon=116.4280, elevation=190),
+        ]
+
+        filtered = parser._filter_coordinate_outliers(points)
+
+        assert filtered == points
+
     def test_terrain_change_gradient_calculation(self, parser: TrackParser, data_dir: Path) -> None:
         """测试坡度计算"""
         gpx_file = data_dir / "gradient_test.gpx"

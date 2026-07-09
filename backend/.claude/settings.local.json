@@ -5,7 +5,8 @@
       "Bash(python -c \"import sys; sys.path.insert\\(0, str\\(Path\\(''D:\\\\2_Study\\\\Outdoor-Agent-Planner\\\\03_Code\\\\backend''\\).parent.parent\\)\\); from src.services.track_parser import TrackParser; parser = TrackParser\\(\\); result = parser.parse_file\\(''2026-01-02重装南风面酃峰.kml''\\); print\\(f''轨迹点数: {result.track_points_count}''\\); print\\(f''大爬升段: {len\\([t for t in result.terrain_analysis if t.change_type == \"\"大爬升\"\"]\\)}''\\); print\\(f''大下降段: {len\\([t for t in result.terrain_analysis if t.change_type == \"\"大下降\"\"]\\)}''\\); for t in result.terrain_analysis: print\\(f''  {t.change_type}: {t.elevation_diff}m, 距离{t.distance_m}m, 坡度{t.gradient_percent}%''\\)\")",
       "Bash(\"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/ -v -m \"not slow and not api\" --tb=short)",
       "Bash(\"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/api/routes/test_auth.py -v --tb=short)",
-      "Bash(\"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/ -v -m \"not slow and not api\" --collect-only)"
+      "Bash(\"C:/Users/xmz14_ugn3mh4/anaconda3/envs/real_base/python.exe\" -m pytest test/ -v -m \"not slow and not api\" --collect-only)",
+      "PowerShell(Get-NetTCPConnection *)"
     ]
   }
 }

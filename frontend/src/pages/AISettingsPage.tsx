@@ -7,11 +7,14 @@ import {
   ExternalLink,
   HelpCircle,
   KeyRound,
+  Loader2,
   MapPin,
+  PlugZap,
   RotateCcw,
   Search,
   ShieldCheck,
 } from 'lucide-react';
+import { planAPI, type ApiConnectionTestResult, type ApiService } from '../lib/api/plan';
 import {
   defaultRuntimeConfig,
   loadRuntimeConfig,
@@ -19,9 +22,18 @@ import {
   type RuntimeAPIConfig,
 } from '../lib/runtimeConfig';
 
+const apiLabels: Record<ApiService, string> = {
+  map: '高德地图',
+  weather: '和风天气',
+  search: '网络搜索',
+  llm: 'AI 摘要',
+};
+
 export default function AISettingsPage() {
   const [config, setConfig] = useState<RuntimeAPIConfig>(() => loadRuntimeConfig());
   const [saved, setSaved] = useState(false);
+  const [testResults, setTestResults] = useState<Partial<Record<ApiService, ApiConnectionTestResult>>>({});
+  const [testing, setTesting] = useState<ApiService | 'all' | null>(null);
 
   const readyCount = useMemo(
     () => [
@@ -47,6 +59,39 @@ export default function AISettingsPage() {
     setConfig(defaultRuntimeConfig);
     saveRuntimeConfig(defaultRuntimeConfig);
     setSaved(true);
+    setTestResults({});
+  };
+
+  const handleTest = async (service: ApiService | 'all') => {
+    setTesting(service);
+    try {
+      const response = await planAPI.testApiConnection({ service, api_config: config });
+      setTestResults((current) => {
+        const next = { ...current };
+        for (const result of response.results) {
+          next[result.service] = result;
+        }
+        return next;
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : '连接测试失败';
+      const services: ApiService[] = service === 'all' ? ['map', 'weather', 'search', 'llm'] : [service];
+      setTestResults((current) => {
+        const next = { ...current };
+        for (const item of services) {
+          next[item] = {
+            service: item,
+            label: apiLabels[item],
+            status: 'failed',
+            message,
+            duration_ms: 0,
+          };
+        }
+        return next;
+      });
+    } finally {
+      setTesting(null);
+    }
   };
 
   return (
@@ -75,11 +120,20 @@ export default function AISettingsPage() {
             </span>
           </div>
           <div className="mt-4 space-y-2">
-            <StatusLine label="高德地图" ready={Boolean(config.map_api_key)} />
-            <StatusLine label="和风天气" ready={Boolean(config.weather_api_key)} />
-            <StatusLine label="网络搜索" ready={Boolean(config.search_api_key)} />
-            <StatusLine label="AI 摘要" ready={Boolean(config.llm_api_key)} />
+            <StatusLine label="高德地图" ready={Boolean(config.map_api_key)} result={testResults.map} />
+            <StatusLine label="和风天气" ready={Boolean(config.weather_api_key)} result={testResults.weather} />
+            <StatusLine label="网络搜索" ready={Boolean(config.search_api_key)} result={testResults.search} />
+            <StatusLine label="AI 摘要" ready={Boolean(config.llm_api_key)} result={testResults.llm} />
           </div>
+          <button
+            type="button"
+            onClick={() => void handleTest('all')}
+            disabled={testing !== null}
+            className="secondary-button mt-4 w-full justify-center"
+          >
+            {testing === 'all' ? <Loader2 size={17} className="animate-spin" /> : <PlugZap size={17} />}
+            {testing === 'all' ? '正在测试全部 API' : '测试全部 API'}
+          </button>
         </aside>
       </section>
 
@@ -91,6 +145,9 @@ export default function AISettingsPage() {
             status={config.map_api_key ? '已启用' : '未配置会跳过交通、救援点、地址反查'}
             description="用于浏览器定位后的地址反查、出发地解析、驾车/公交方案、周边救援点和景观线索。"
             links={[{ label: '高德开发控制台', href: 'https://console.amap.com/dev/index' }]}
+            testResult={testResults.map}
+            testing={testing === 'map' || testing === 'all'}
+            onTest={() => void handleTest('map')}
           >
             <Field label="高德地图 Web 服务 Key" type="password" value={config.map_api_key} onChange={(value) => update('map_api_key', value)} />
           </ConfigSection>
@@ -101,6 +158,9 @@ export default function AISettingsPage() {
             status={config.weather_api_key ? '已启用' : '未配置会跳过真实天气'}
             description="用于出行日天气、风力、降水、体感、风寒和关键海拔点估算。"
             links={[{ label: '和风天气控制台', href: 'https://console.qweather.com/setting?lang=zh' }]}
+            testResult={testResults.weather}
+            testing={testing === 'weather' || testing === 'all'}
+            onTest={() => void handleTest('weather')}
           >
             <Field label="和风天气 API Key" type="password" value={config.weather_api_key} onChange={(value) => update('weather_api_key', value)} />
             <Field label="和风天气 Host" value={config.weather_developer_host} onChange={(value) => update('weather_developer_host', value)} />
@@ -112,6 +172,9 @@ export default function AISettingsPage() {
             status={config.search_api_key ? '已启用' : '未配置会跳过网络洞察'}
             description="用于搜索百度、抖音、B 站、小红书等平台线索，并交给 AI 汇总成可读攻略。"
             links={[{ label: 'Tavily', href: 'https://www.tavily.com/' }]}
+            testResult={testResults.search}
+            testing={testing === 'search' || testing === 'all'}
+            onTest={() => void handleTest('search')}
           >
             <Field label="Tavily API Key" type="password" value={config.search_api_key} onChange={(value) => update('search_api_key', value)} />
           </ConfigSection>
@@ -126,6 +189,9 @@ export default function AISettingsPage() {
               { label: 'SiliconFlow 模型', href: 'https://cloud.siliconflow.cn/me/models' },
               { label: 'OhMyGPT APIs', href: 'https://www.ohmygpt.com/apis' },
             ]}
+            testResult={testResults.llm}
+            testing={testing === 'llm' || testing === 'all'}
+            onTest={() => void handleTest('llm')}
           >
             <Field label="API Key" type="password" value={config.llm_api_key} onChange={(value) => update('llm_api_key', value)} />
             <Field label="Base URL" value={config.llm_base_url} onChange={(value) => update('llm_base_url', value)} />
@@ -187,13 +253,22 @@ export default function AISettingsPage() {
   );
 }
 
-function StatusLine({ label, ready }: { label: string; ready: boolean }) {
+function StatusLine({
+  label,
+  ready,
+  result,
+}: {
+  label: string;
+  ready: boolean;
+  result?: ApiConnectionTestResult;
+}) {
+  const statusText = result ? resultStatusText(result.status) : ready ? '已配置' : '会降级';
+  const statusClass = result ? resultStatusClass(result.status) : ready ? 'text-[var(--success)]' : 'text-[var(--warning)]';
+
   return (
     <div className="flex items-center justify-between rounded-lg border border-[var(--border)] bg-[var(--canvas)] px-3 py-2 text-sm">
       <span>{label}</span>
-      <span className={ready ? 'font-semibold text-[var(--success)]' : 'font-semibold text-[var(--warning)]'}>
-        {ready ? '已配置' : '会降级'}
-      </span>
+      <span className={`font-semibold ${statusClass}`}>{statusText}</span>
     </div>
   );
 }
@@ -205,6 +280,9 @@ function ConfigSection({
   description,
   children,
   links = [],
+  testResult,
+  testing,
+  onTest,
 }: {
   icon: ReactNode;
   title: string;
@@ -212,6 +290,9 @@ function ConfigSection({
   description: string;
   children: ReactNode;
   links?: Array<{ label: string; href: string }>;
+  testResult?: ApiConnectionTestResult;
+  testing?: boolean;
+  onTest?: () => void;
 }) {
   return (
     <section className="border-b border-[var(--border)] pb-5 last:border-0">
@@ -224,8 +305,8 @@ function ConfigSection({
           <p className="mt-1 text-sm leading-6 text-[var(--muted)]">{description}</p>
           <p className="mt-1 text-xs font-semibold text-[var(--warning)]">{status}</p>
         </div>
-        {links.length > 0 ? (
-          <div className="flex shrink-0 flex-wrap gap-2">
+        {links.length > 0 || onTest ? (
+          <div className="flex shrink-0 flex-wrap gap-2 sm:justify-end">
             {links.map((link) => (
               <a
                 key={link.href}
@@ -238,12 +319,48 @@ function ConfigSection({
                 <ExternalLink size={13} />
               </a>
             ))}
+            {onTest ? (
+              <button
+                type="button"
+                onClick={onTest}
+                disabled={testing}
+                className="inline-flex min-h-8 items-center gap-1 rounded-lg border border-[var(--border)] px-2.5 text-xs font-semibold text-[var(--primary)] hover:bg-[var(--canvas)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {testing ? <Loader2 size={13} className="animate-spin" /> : <PlugZap size={13} />}
+                {testing ? '测试中' : '测试连接'}
+              </button>
+            ) : null}
           </div>
         ) : null}
       </div>
+      {testResult ? (
+        <div className={`mt-3 rounded-lg border px-3 py-2 text-xs leading-5 ${resultPanelClass(testResult.status)}`}>
+          <span className="font-semibold">{resultStatusText(testResult.status)}</span>
+          <span className="ml-2">{testResult.message}</span>
+          <span className="ml-2 text-[var(--muted)]">{testResult.duration_ms}ms</span>
+        </div>
+      ) : null}
       <div className="mt-4 grid gap-4 sm:grid-cols-2">{children}</div>
     </section>
   );
+}
+
+function resultStatusText(status: ApiConnectionTestResult['status']): string {
+  if (status === 'success') return '连接正常';
+  if (status === 'skipped') return '已跳过';
+  return '连接失败';
+}
+
+function resultStatusClass(status: ApiConnectionTestResult['status']): string {
+  if (status === 'success') return 'text-[var(--success)]';
+  if (status === 'skipped') return 'text-[var(--warning)]';
+  return 'text-red-600';
+}
+
+function resultPanelClass(status: ApiConnectionTestResult['status']): string {
+  if (status === 'success') return 'border-emerald-200 bg-emerald-50 text-emerald-800';
+  if (status === 'skipped') return 'border-amber-200 bg-amber-50 text-amber-800';
+  return 'border-red-200 bg-red-50 text-red-700';
 }
 
 function GuideCard({ icon, title, items }: { icon: ReactNode; title: string; items: string[] }) {

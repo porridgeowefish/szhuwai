@@ -13,6 +13,7 @@
 """
 
 from pathlib import Path
+from statistics import median
 from typing import List, Literal, Optional, Union
 
 from loguru import logger
@@ -46,6 +47,11 @@ class TrackParser:
     SMOOTHING_WINDOW_SIZE = 5  # 滑动平均窗口大小（推荐3-5）
     ELEVATION_OUTLIER_THRESHOLD = 50  # 海拔异常值阈值（米）
     SMOOTHING_MIN_POINTS = 50  # 最少点数阈值，低于此值不进行平滑（避免影响少量测试点）
+    COORDINATE_OUTLIER_MIN_POINTS = 4  # 坐标跳点过滤最少点数
+    COORDINATE_JUMP_MIN_M = 300  # 小于该距离的跳动不按漂移处理
+    COORDINATE_JUMP_MEDIAN_FACTOR = 8  # 相邻段距离超过中位数的倍数才视为候选跳点
+    COORDINATE_DIRECT_MAX_M = 250  # 跳过异常点后，前后点应能自然衔接
+    HIKING_MAX_SPEED_MPS = 12  # 约 43km/h，超过基本可判定为 GPS 飘点而非徒步
 
     def __init__(self) -> None:
         """初始化解析器"""
@@ -96,6 +102,62 @@ class TrackParser:
                 smoothed_points.append(point)
 
         return smoothed_points
+
+    def _filter_coordinate_outliers(self, points: List[Point3D]) -> List[Point3D]:
+        """过滤孤立 GPS 漂移点，避免地图折线和距离计算被远距离跳点污染。
+
+        只处理“出去又回来”的孤立尖刺：prev->cur 和 cur->next 都异常长，
+        但 prev->next 很短。真实稀疏采样产生的长线段不会满足这个形态。
+        """
+        if len(points) < self.COORDINATE_OUTLIER_MIN_POINTS:
+            return points[:]
+
+        segment_distances = [
+            self._haversine_distance(points[i].lat, points[i].lon, points[i + 1].lat, points[i + 1].lon)
+            for i in range(len(points) - 1)
+        ]
+        nonzero_distances = [d for d in segment_distances if d > 1]
+        if not nonzero_distances:
+            return points[:]
+
+        sorted_distances = sorted(nonzero_distances)
+        short_half = sorted_distances[:max(1, len(sorted_distances) // 2)]
+        typical_distance = median(short_half)
+        jump_threshold = max(self.COORDINATE_JUMP_MIN_M, typical_distance * self.COORDINATE_JUMP_MEDIAN_FACTOR)
+
+        filtered: list[Point3D] = [points[0]]
+        removed_count = 0
+        for i in range(1, len(points) - 1):
+            prev_point = filtered[-1]
+            point = points[i]
+            next_point = points[i + 1]
+            prev_to_point = self._haversine_distance(prev_point.lat, prev_point.lon, point.lat, point.lon)
+            point_to_next = self._haversine_distance(point.lat, point.lon, next_point.lat, next_point.lon)
+            prev_to_next = self._haversine_distance(prev_point.lat, prev_point.lon, next_point.lat, next_point.lon)
+
+            is_spike = (
+                prev_to_point >= jump_threshold
+                and point_to_next >= jump_threshold
+                and prev_to_next <= max(self.COORDINATE_DIRECT_MAX_M, typical_distance * 3)
+            )
+            if not is_spike and point.timestamp and next_point.timestamp:
+                seconds = (next_point.timestamp - point.timestamp).total_seconds()
+                speed = point_to_next / seconds if seconds > 0 else 0
+                is_spike = (
+                    speed > self.HIKING_MAX_SPEED_MPS
+                    and prev_to_point >= jump_threshold
+                    and prev_to_next <= max(self.COORDINATE_DIRECT_MAX_M, typical_distance * 3)
+                )
+
+            if is_spike:
+                removed_count += 1
+                continue
+            filtered.append(point)
+
+        filtered.append(points[-1])
+        if removed_count:
+            logger.info(f"Coordinate outlier filtering removed {removed_count} GPS drift points")
+        return filtered
 
     def parse_file(
         self,
@@ -192,8 +254,9 @@ class TrackParser:
 
         logger.info(f"Parsed {len(points)} track points from {file_path}")
 
-        # 对轨迹点进行平滑处理（去除海拔噪点）
-        smoothed_points = self._smooth_elevation(points)
+        # 先过滤坐标跳点，再平滑海拔噪点，避免漂移点污染距离、渲染和地形计算
+        filtered_points = self._filter_coordinate_outliers(points)
+        smoothed_points = self._smooth_elevation(filtered_points)
         logger.info("Elevation smoothing completed")
 
         return self._analyze_points(smoothed_points, track_name)
@@ -281,8 +344,9 @@ class TrackParser:
 
         logger.info(f"Parsed {len(points)} track points from {file_path}")
 
-        # 对轨迹点进行平滑处理（去除海拔噪点）
-        smoothed_points = self._smooth_elevation(points)
+        # 先过滤坐标跳点，再平滑海拔噪点，避免漂移点污染距离、渲染和地形计算
+        filtered_points = self._filter_coordinate_outliers(points)
+        smoothed_points = self._smooth_elevation(filtered_points)
         logger.info("Elevation smoothing completed")
 
         return self._analyze_points(smoothed_points, track_name)

@@ -87,6 +87,20 @@ export interface WebInsightResult {
   message: string;
 }
 
+export type ApiService = 'map' | 'weather' | 'search' | 'llm';
+
+export interface ApiConnectionTestResult {
+  service: ApiService;
+  label: string;
+  status: 'success' | 'failed' | 'skipped';
+  message: string;
+  duration_ms: number;
+}
+
+export interface ApiConnectionTestResponse {
+  results: ApiConnectionTestResult[];
+}
+
 function parseSSE(raw: string): { event: string; data: unknown } | null {
   let event = 'message';
   const dataLines: string[] = [];
@@ -162,6 +176,12 @@ export const planAPI = {
     payload: { keywords: string; references: WebReference[]; api_config: RuntimeAPIConfig },
   ): Promise<WebInsightResult> => {
     const response = await apiClient.post<WebInsightResult>('/plan/insight', payload);
+    return response.data;
+  },
+  testApiConnection: async (
+    payload: { service: ApiService | 'all'; api_config: RuntimeAPIConfig },
+  ): Promise<ApiConnectionTestResponse> => {
+    const response = await apiClient.post<ApiConnectionTestResponse>('/runtime/test', payload);
     return response.data;
   },
 };
